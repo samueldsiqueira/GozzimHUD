@@ -1,0 +1,73 @@
+-- Magic Shooter Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Toggles the native Magic Shooter system on/off via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 3059  -- Wand of Inferno
+local GROUP = "bot"
+local SLOT = 2
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.5
+-- ######################################################
+
+local shooterIcon = nil
+local shooterLabel = nil
+
+local function updateIconState()
+    if not shooterIcon then return end
+    if Engine.isMagicShooterEnabled() then
+        shooterIcon:setOpacity(OPACITY_ON)
+        if shooterLabel then shooterLabel:setColor(80, 220, 80) end
+    else
+        shooterIcon:setOpacity(OPACITY_OFF)
+        if shooterLabel then shooterLabel:setColor(160, 160, 160) end
+    end
+end
+
+local function toggleMagicShooter()
+    local current = Engine.isMagicShooterEnabled()
+    Engine.enableMagicShooter(not current)
+    Timer.new("UpdateShooterDelay", function()
+        updateIconState()
+        if not current then
+            print("> Magic Shooter ENABLED.")
+        else
+            print("> Magic Shooter DISABLED.")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    shooterIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    shooterLabel = HUD.new(pos.x + 36, pos.y + 8, "Shooter", true)
+
+    if shooterIcon then
+        shooterIcon:setCallback(toggleMagicShooter)
+        HudLayout.registerElement(GROUP, SLOT, shooterIcon, 0, 0)
+
+        if shooterLabel then
+            shooterLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, shooterLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("ShooterSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Magic Shooter Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Magic Shooter Toggle HUD.")
+    end
+end
+
+local function unload()
+    if shooterIcon then HudLayout.unregisterElement(shooterIcon); shooterIcon:destroy(); shooterIcon = nil end
+    if shooterLabel then HudLayout.unregisterElement(shooterLabel); shooterLabel:destroy(); shooterLabel = nil end
+    destroyTimer("ShooterSyncTimer")
+    print("> Magic Shooter Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

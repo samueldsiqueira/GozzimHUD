@@ -1,3 +1,5 @@
+-- Char Info HUD for Zerobot
+-- Author: SamuHell
 local gameWindow = Client.getGameWindowDimensions()
 local ICON_ITEM_ID = 4843
 local ICON_POSITION_X = 50
@@ -116,7 +118,7 @@ local function saveSettings()
         SCAN_INTERVAL_MS = SCAN_INTERVAL_MS
     }
 
-    local filePath = Engine.getScriptsDirectory() .. "/GozzimScripts/Storage/" .. fileName
+    local filePath = Engine.getScriptsDirectory() .. "/SamuhellScripts/Storage/" .. fileName
     local file = io.open(filePath, "w")
     if file then
         file:write(JSON.encode(settings))
@@ -130,7 +132,7 @@ local function loadSettings()
         return false
     end
 
-    local filePath = Engine.getScriptsDirectory() .. "/GozzimScripts/Storage/" .. fileName
+    local filePath = Engine.getScriptsDirectory() .. "/SamuhellScripts/Storage/" .. fileName
     local file = io.open(filePath, "r")
     if file then
         local content = file:read("*a")
@@ -180,7 +182,7 @@ local function getCharacterInfoPath(worldNameOverride)
     -- Trim and replace spaces and colons
     local sanitizedWorldName = worldName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
 
-    return string.format("%s/GozzimScripts/Storage/charInfo_%s.json", scriptsDir, sanitizedWorldName), sanitizedWorldName
+    return string.format("%s/SamuhellScripts/Storage/charInfo_%s.json", scriptsDir, sanitizedWorldName), sanitizedWorldName
 end
 
 local function saveCharacterInfo(worldNameToSave)

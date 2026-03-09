@@ -1,0 +1,73 @@
+-- Heal Friend Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Toggles the native Heal Friend system on/off via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 3058  -- Life Ring
+local GROUP = "bot"
+local SLOT = 4
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.5
+-- ######################################################
+
+local friendIcon = nil
+local friendLabel = nil
+
+local function updateIconState()
+    if not friendIcon then return end
+    if Engine.isHealFriendEnabled() then
+        friendIcon:setOpacity(OPACITY_ON)
+        if friendLabel then friendLabel:setColor(80, 220, 80) end
+    else
+        friendIcon:setOpacity(OPACITY_OFF)
+        if friendLabel then friendLabel:setColor(160, 160, 160) end
+    end
+end
+
+local function toggleHealFriend()
+    local current = Engine.isHealFriendEnabled()
+    Engine.enableHealFriend(not current)
+    Timer.new("UpdateFriendDelay", function()
+        updateIconState()
+        if not current then
+            print("> Heal Friend ENABLED.")
+        else
+            print("> Heal Friend DISABLED.")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    friendIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    friendLabel = HUD.new(pos.x + 36, pos.y + 8, "Friend", true)
+
+    if friendIcon then
+        friendIcon:setCallback(toggleHealFriend)
+        HudLayout.registerElement(GROUP, SLOT, friendIcon, 0, 0)
+
+        if friendLabel then
+            friendLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, friendLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("FriendSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Heal Friend Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Heal Friend Toggle HUD.")
+    end
+end
+
+local function unload()
+    if friendIcon then HudLayout.unregisterElement(friendIcon); friendIcon:destroy(); friendIcon = nil end
+    if friendLabel then HudLayout.unregisterElement(friendLabel); friendLabel:destroy(); friendLabel = nil end
+    destroyTimer("FriendSyncTimer")
+    print("> Heal Friend Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

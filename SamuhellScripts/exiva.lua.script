@@ -1,4 +1,5 @@
 -- Smart "Exiva" Script for Zerobot
+-- Author: SamuHell
 -- Uses a "sticky" target system with Smart/Frenzy modes and multiple targeting methods.
 
 -- #################### CONFIGURATION ####################
@@ -16,13 +17,9 @@ local FRENZY_ICON_ID = 6546 -- Dracolas Eye
 -- Text color for target
 local COLOR_TARGET = { r = 200, g = 200, b = 80 }
 
--- Position of the icons and text display.
-local MAIN_ICON_POS_X = 10
-local MAIN_ICON_POS_Y = 560
-local FRENZY_ICON_POS_X = 50
-local FRENZY_ICON_POS_Y = 560
-local TARGET_TEXT_POS_X = 10
-local TARGET_TEXT_POS_Y = 590
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 15
 
 -- Opacity for icons when ON vs OFF.
 local OPACITY_ON = 1.0
@@ -37,6 +34,7 @@ local currentTargetName = nil
 
 -- HUD object variables
 local exivaIcon, frenzyIcon, targetDisplayHud = nil, nil, nil
+local exivaLabel = nil
 
 -- This event handler detects when you manually cast exiva.
 local function onPlayerTalk(name, level, type, x, y, z, text)
@@ -58,10 +56,12 @@ local function toggleExiva()
     if isExivaActive then
         exivaIcon:setOpacity(OPACITY_ON)
         targetDisplayHud:show()
-        print(">> Smart Exiva ENABLED.")
+        if exivaLabel then exivaLabel:setColor(80, 220, 80) end
+        print("> Smart Exiva ENABLED.")
     else
         exivaIcon:setOpacity(OPACITY_OFF)
         targetDisplayHud:hide()
+        if exivaLabel then exivaLabel:setColor(160, 160, 160) end
         if isFrenzyMode then
             isFrenzyMode = false
             frenzyIcon:setOpacity(OPACITY_OFF)
@@ -131,15 +131,26 @@ local function exivaLoop()
 end
 
 local function load()
-    exivaIcon = HUD.new(MAIN_ICON_POS_X, MAIN_ICON_POS_Y, MAIN_ICON_ID, true)
-    frenzyIcon = HUD.new(FRENZY_ICON_POS_X, FRENZY_ICON_POS_Y, FRENZY_ICON_ID, true)
-    targetDisplayHud = HUD.new(TARGET_TEXT_POS_X, TARGET_TEXT_POS_Y, "No Target", true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    exivaIcon = HUD.new(pos.x, pos.y, MAIN_ICON_ID, true)
+    frenzyIcon = HUD.new(pos.x + 40, pos.y, FRENZY_ICON_ID, true)
+    targetDisplayHud = HUD.new(pos.x, pos.y + 30, "No Target", true)
+    exivaLabel = HUD.new(pos.x + 76, pos.y + 8, "Exiva", true)
 
     if exivaIcon and frenzyIcon and targetDisplayHud then
         targetDisplayHud:setColor(COLOR_TARGET.r, COLOR_TARGET.g, COLOR_TARGET.b)
         exivaIcon:setOpacity(OPACITY_OFF)
         frenzyIcon:setOpacity(OPACITY_OFF)
         targetDisplayHud:hide()
+        HudLayout.registerElement(GROUP, SLOT, exivaIcon, 0, 0)
+        HudLayout.registerElement(GROUP, SLOT, frenzyIcon, 40, 0)
+        HudLayout.registerElement(GROUP, SLOT, targetDisplayHud, 0, 30)
+
+        if exivaLabel then
+            exivaLabel:setColor(160, 160, 160)
+            exivaLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, exivaLabel, 76, 8)
+        end
 
         exivaIcon:setCallback(toggleExiva)
         frenzyIcon:setCallback(toggleFrenzy)
@@ -155,18 +166,10 @@ local function load()
 end
 
 local function unload()
-    if exivaIcon then
-        exivaIcon:destroy()
-        exivaIcon = nil
-    end
-    if frenzyIcon then
-        frenzyIcon:destroy()
-        frenzyIcon = nil
-    end
-    if targetDisplayHud then
-        targetDisplayHud:destroy()
-        targetDisplayHud = nil
-    end
+    if exivaIcon then HudLayout.unregisterElement(exivaIcon); exivaIcon:destroy(); exivaIcon = nil end
+    if frenzyIcon then HudLayout.unregisterElement(frenzyIcon); frenzyIcon:destroy(); frenzyIcon = nil end
+    if targetDisplayHud then HudLayout.unregisterElement(targetDisplayHud); targetDisplayHud:destroy(); targetDisplayHud = nil end
+    if exivaLabel then HudLayout.unregisterElement(exivaLabel); exivaLabel:destroy(); exivaLabel = nil end
 
     Game.unregisterEvent(Game.Events.TALK, onPlayerTalk)
 

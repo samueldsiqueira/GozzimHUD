@@ -1,0 +1,73 @@
+-- Timer Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Toggles the native Timer system on/off via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 6523  -- Mechanical Counter (hourglass-like)
+local GROUP = "bot"
+local SLOT = 5
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.5
+-- ######################################################
+
+local timerIcon = nil
+local timerLabel = nil
+
+local function updateIconState()
+    if not timerIcon then return end
+    if Engine.isTimerEnabled() then
+        timerIcon:setOpacity(OPACITY_ON)
+        if timerLabel then timerLabel:setColor(80, 220, 80) end
+    else
+        timerIcon:setOpacity(OPACITY_OFF)
+        if timerLabel then timerLabel:setColor(160, 160, 160) end
+    end
+end
+
+local function toggleTimer()
+    local current = Engine.isTimerEnabled()
+    Engine.enableTimer(not current)
+    Timer.new("UpdateTimerDelay", function()
+        updateIconState()
+        if not current then
+            print("> Timer ENABLED.")
+        else
+            print("> Timer DISABLED.")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    timerIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    timerLabel = HUD.new(pos.x + 36, pos.y + 8, "Timer", true)
+
+    if timerIcon then
+        timerIcon:setCallback(toggleTimer)
+        HudLayout.registerElement(GROUP, SLOT, timerIcon, 0, 0)
+
+        if timerLabel then
+            timerLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, timerLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("TimerSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Timer Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Timer Toggle HUD.")
+    end
+end
+
+local function unload()
+    if timerIcon then HudLayout.unregisterElement(timerIcon); timerIcon:destroy(); timerIcon = nil end
+    if timerLabel then HudLayout.unregisterElement(timerLabel); timerLabel:destroy(); timerLabel = nil end
+    destroyTimer("TimerSyncTimer")
+    print("> Timer Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

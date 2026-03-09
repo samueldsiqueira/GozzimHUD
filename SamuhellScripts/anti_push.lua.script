@@ -1,26 +1,27 @@
 -- Anti-Push Toggle HUD for Zerobot
+-- Author: SamuHell
 -- Creates a clickable icon to enable/disable the "Anti-Push" PvP tool.
 
 -- #################### CONFIGURATION ####################
 -- Item ID for the icon.
 local ICON_ITEM_ID = 9104
 
--- Position of the icon on the screen.
-local ICON_POSITION_X = 10
-local ICON_POSITION_Y = 520
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 13
 
 -- How often to check for external changes (in milliseconds).
--- This ensures the icon updates if you change the setting manually in the bot UI.
 local SYNC_INTERVAL_MS = 1000
 
--- Opacity for the icon when ON vs OFF.
-local OPACITY_ON = 1.0  -- Fully visible
-local OPACITY_OFF = 0.5 -- Semi-transparent
+-- Opacity
+local OPACITY_ON = 1.0
+local OPACITY_OFF = 0.5
 -- ######################################################
 
 
 -- This will hold our HUD object.
 local antiPushIcon = nil
+local antiPushLabel = nil
 
 -- This function updates the icon's appearance based on the bot's setting.
 local function updateIconState()
@@ -29,11 +30,11 @@ local function updateIconState()
     end
 
     if Engine.isAntiPushEnabled() then
-        -- If enabled, make the icon fully visible.
         antiPushIcon:setOpacity(OPACITY_ON)
+        if antiPushLabel then antiPushLabel:setColor(80, 220, 80) end
     else
-        -- If disabled, make the icon semi-transparent.
         antiPushIcon:setOpacity(OPACITY_OFF)
+        if antiPushLabel then antiPushLabel:setColor(160, 160, 160) end
     end
 end
 
@@ -57,12 +58,19 @@ local function toggleAntiPush()
 end
 
 local function load()
-    -- Create the HUD icon using the item ID and position from the config.
-    antiPushIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, ICON_ITEM_ID, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    antiPushIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    antiPushLabel = HUD.new(pos.x + 36, pos.y + 8, "AntiPush", true)
 
     if antiPushIcon then
-        -- Set the icon's click action to our toggle function.
         antiPushIcon:setCallback(toggleAntiPush)
+        HudLayout.registerElement(GROUP, SLOT, antiPushIcon, 0, 0)
+
+        if antiPushLabel then
+            antiPushLabel:setColor(80, 220, 80)
+            antiPushLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, antiPushLabel, 36, 8)
+        end
 
         -- Set the initial appearance of the icon when the script loads.
         updateIconState()
@@ -71,19 +79,17 @@ local function load()
         Timer.new("AntiPushSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
 
         -- Print a confirmation message in the Zerobot console.
-        print(">> Anti-Push Toggle HUD loaded. Click the magic wall icon to toggle.")
+        print("> Anti-Push Toggle HUD loaded.")
     else
-        print(">> ERROR: Failed to create Anti-Push Toggle HUD.")
+        print("> ERROR: Failed to create Anti-Push Toggle HUD.")
     end
 end
 
 local function unload()
-    if antiPushIcon then
-        antiPushIcon:destroy()
-        antiPushIcon = nil
-    end
+    if antiPushIcon then HudLayout.unregisterElement(antiPushIcon); antiPushIcon:destroy(); antiPushIcon = nil end
+    if antiPushLabel then HudLayout.unregisterElement(antiPushLabel); antiPushLabel:destroy(); antiPushLabel = nil end
     destroyTimer("AntiPushSyncTimer")
-    print(">> Anti-Push Toggle HUD unloaded.")
+    print("> Anti-Push Toggle HUD unloaded.")
 end
 
 return {

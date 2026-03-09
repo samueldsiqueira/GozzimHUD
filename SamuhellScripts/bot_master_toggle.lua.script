@@ -1,0 +1,80 @@
+-- Bot Master Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Master switch to enable/disable the ENTIRE bot via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 2361  -- Crystal Ball
+local GROUP = "bot"
+local SLOT = 6
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.3  -- More transparent for OFF (master switch)
+-- ######################################################
+
+local botIcon = nil
+local botLabel = nil
+
+local function updateIconState()
+    if not botIcon then return end
+    if Engine.isBotEnabled() then
+        botIcon:setOpacity(OPACITY_ON)
+        if botLabel then
+            botLabel:setText("BOT ON")
+            botLabel:setColor(80, 255, 80)
+        end
+    else
+        botIcon:setOpacity(OPACITY_OFF)
+        if botLabel then
+            botLabel:setText("BOT OFF")
+            botLabel:setColor(255, 80, 80)
+        end
+    end
+end
+
+local function toggleBot()
+    local current = Engine.isBotEnabled()
+    Engine.enableBot(not current)
+    Timer.new("UpdateBotDelay", function()
+        updateIconState()
+        if not current then
+            print("> BOT ENABLED (All systems ON).")
+        else
+            print("> BOT DISABLED (All systems OFF).")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    botIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    botLabel = HUD.new(pos.x + 36, pos.y + 8, "BOT", true)
+
+    if botIcon then
+        botIcon:setCallback(toggleBot)
+        botIcon:setScale(1.2)
+        HudLayout.registerElement(GROUP, SLOT, botIcon, 0, 0)
+
+        if botLabel then
+            botLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, botLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("BotMasterSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Bot Master Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Bot Master Toggle HUD.")
+    end
+end
+
+local function unload()
+    if botIcon then HudLayout.unregisterElement(botIcon); botIcon:destroy(); botIcon = nil end
+    if botLabel then HudLayout.unregisterElement(botLabel); botLabel:destroy(); botLabel = nil end
+    destroyTimer("BotMasterSyncTimer")
+    print("> Bot Master Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

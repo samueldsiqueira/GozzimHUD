@@ -1,4 +1,5 @@
 -- Auto-Skinner Toggle HUD for Zerobot
+-- Author: SamuHell
 -- Automatically skins nearby corpses with the correct tool when toggled on.
 
 -- #################### CONFIGURATION ####################
@@ -9,18 +10,17 @@ local ICON_ITEM_ID = 5908
 local OBSIDIAN_KNIFE_ID = 5908
 local BLESSED_STAKE_ID = 5942
 
--- Position of the icon on the screen.
-local ICON_POSITION_X = 10
-local ICON_POSITION_Y = 400
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 10
 
--- Cooldown in milliseconds after a kill before scanning for corpses.
--- This gives the game time to render the corpse and prevents spam.
+-- Cooldown in milliseconds
 local SKIN_SCAN_DELAY_MS = 500
-local SKIN_COOLDOWN_MS = 1000 -- Cooldown between skinning attempts
+local SKIN_COOLDOWN_MS = 1000
 
--- Opacity for the icon when ON vs OFF.
-local OPACITY_ON = 1.0  -- Fully visible
-local OPACITY_OFF = 0.5 -- Semi-transparent
+-- Opacity
+local OPACITY_ON = 1.0
+local OPACITY_OFF = 0.5
 -- ######################################################
 
 
@@ -32,16 +32,19 @@ local stakeBodies = { [4097] = true, [4137] = true, [8738] = true, [18958] = tru
 local isAutoSkinActive = false
 local lastSkinAttemptTime = 0
 local autoSkinIcon = nil
+local skinLabel = nil
 
 -- This function is called when the HUD icon is clicked.
 local function toggleAutoSkin()
     isAutoSkinActive = not isAutoSkinActive
     if isAutoSkinActive then
         autoSkinIcon:setOpacity(OPACITY_ON)
-        print(">> Auto-Skinner ENABLED.")
+        if skinLabel then skinLabel:setColor(80, 220, 80) end
+        print("> Auto-Skinner ENABLED.")
     else
         autoSkinIcon:setOpacity(OPACITY_OFF)
-        print(">> Auto-Skinner DISABLED.")
+        if skinLabel then skinLabel:setColor(160, 160, 160) end
+        print("> Auto-Skinner DISABLED.")
     end
 end
 
@@ -106,31 +109,38 @@ local function onTextMessage(messageData)
 end
 
 local function load()
-    autoSkinIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, ICON_ITEM_ID, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    autoSkinIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    skinLabel = HUD.new(pos.x + 36, pos.y + 8, "Skin", true)
 
     if autoSkinIcon then
         autoSkinIcon:setOpacity(OPACITY_OFF)
         autoSkinIcon:setCallback(toggleAutoSkin)
+        HudLayout.registerElement(GROUP, SLOT, autoSkinIcon, 0, 0)
+
+        if skinLabel then
+            skinLabel:setColor(160, 160, 160)
+            skinLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, skinLabel, 36, 8)
+        end
 
         -- Register the event listener for monster kills.
         Game.registerEvent(Game.Events.TEXT_MESSAGE, onTextMessage)
 
-        print(">> Auto-Skinner HUD loaded.")
+        print("> Auto-Skinner HUD loaded.")
     else
-        print(">> ERROR: Failed to create Auto-Skinner HUD.")
+        print("> ERROR: Failed to create Auto-Skinner HUD.")
     end
 end
 
 local function unload()
-    if autoSkinIcon then
-        autoSkinIcon:destroy()
-        autoSkinIcon = nil
-    end
+    if autoSkinIcon then HudLayout.unregisterElement(autoSkinIcon); autoSkinIcon:destroy(); autoSkinIcon = nil end
+    if skinLabel then HudLayout.unregisterElement(skinLabel); skinLabel:destroy(); skinLabel = nil end
     Game.unregisterEvent(Game.Events.TEXT_MESSAGE, onTextMessage)
     -- Although it's a one-shot timer, it's good practice to clean it up
     -- in case the script is unloaded before the timer fires.
     destroyTimer("SkinScanTimer")
-    print(">> Auto-Skinner HUD unloaded.")
+    print("> Auto-Skinner HUD unloaded.")
 end
 
 return {

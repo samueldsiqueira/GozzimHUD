@@ -1,4 +1,5 @@
 -- Auto-Fishing Script for Zerobot
+-- Author: SamuHell
 -- Worm count text color changes based on the script's active state.
 
 -- #################### CONFIGURATION ####################
@@ -15,23 +16,23 @@ local ICON_ITEM_ID = 3483
 local FISHING_ROD_ID = 3483
 local WORM_ID = 3492
 
--- Position of the main fishing icon on the screen.
-local ICON_POSITION_X = 10
-local ICON_POSITION_Y = 480
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 11
 
--- Position for the worm count text, manually centered below the 32x32 icon.
+-- Position offsets for the worm count text
 local ICON_WIDTH = 32
 local ICON_HEIGHT = 32
-local COUNT_POSITION_X = (ICON_POSITION_X + ICON_WIDTH / 2) - 12
-local COUNT_POSITION_Y = ICON_POSITION_Y + ICON_HEIGHT - 10
+local COUNT_OFFSET_X = (ICON_WIDTH / 2) - 12
+local COUNT_OFFSET_Y = ICON_HEIGHT - 10
 
--- Opacity for the icon when ON vs OFF.
+-- Opacity
 local OPACITY_ON = 1.0
 local OPACITY_OFF = 0.5
 
 -- Colors for the worm count text.
-local COLOR_ACTIVE = { r = 255, g = 255, b = 255 } -- White
-local COLOR_INACTIVE = { r = 150, g = 150, b = 150 } -- Grey
+local COLOR_ACTIVE = { r = 255, g = 255, b = 255 }
+local COLOR_INACTIVE = { r = 150, g = 150, b = 150 }
 -- ######################################################
 
 -- A set of known water tile IDs for fast checking.
@@ -45,6 +46,7 @@ local waterTileIds = {
 local isFishingActive = false
 local fishingIcon = nil
 local wormCountHud = nil
+local fishLabel = nil
 local lastWormCount = -1
 local fishingState = "IDLE"
 local castTimestamp = 0
@@ -56,14 +58,16 @@ local function toggleFishing()
         if wormCountHud then
             wormCountHud:setColor(COLOR_ACTIVE.r, COLOR_ACTIVE.g, COLOR_ACTIVE.b)
         end
-        print(">> Auto-Fishing ENABLED.")
+        if fishLabel then fishLabel:setColor(80, 220, 80) end
+        print("> Auto-Fishing ENABLED.")
         fishingState = "IDLE"
     else
         fishingIcon:setOpacity(OPACITY_OFF)
         if wormCountHud then
             wormCountHud:setColor(COLOR_INACTIVE.r, COLOR_INACTIVE.g, COLOR_INACTIVE.b)
         end
-        print(">> Auto-Fishing DISABLED.")
+        if fishLabel then fishLabel:setColor(160, 160, 160) end
+        print("> Auto-Fishing DISABLED.")
     end
 end
 
@@ -141,34 +145,38 @@ local function fishingLoop()
 end
 
 local function load()
-    fishingIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, ICON_ITEM_ID, true)
-    wormCountHud = HUD.new(COUNT_POSITION_X, COUNT_POSITION_Y, "0", true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    fishingIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    wormCountHud = HUD.new(pos.x + COUNT_OFFSET_X, pos.y + COUNT_OFFSET_Y, "0", true)
+    fishLabel = HUD.new(pos.x + 36, pos.y + 8, "Fish", true)
 
     if fishingIcon and wormCountHud then
         fishingIcon:setCallback(toggleFishing)
         fishingIcon:setOpacity(OPACITY_OFF)
+        HudLayout.registerElement(GROUP, SLOT, fishingIcon, 0, 0)
+        HudLayout.registerElement(GROUP, SLOT, wormCountHud, COUNT_OFFSET_X, COUNT_OFFSET_Y)
 
-        -- Style the worm count text and set its initial inactive color.
         wormCountHud:setColor(COLOR_INACTIVE.r, COLOR_INACTIVE.g, COLOR_INACTIVE.b)
 
+        if fishLabel then
+            fishLabel:setColor(160, 160, 160)
+            fishLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, fishLabel, 36, 8)
+        end
+
         Timer.new("FishingMasterTimer", fishingLoop, LOOP_INTERVAL_MS, true)
-        print(">> Auto-Fishing HUD loaded.")
+        print("> Auto-Fishing HUD loaded.")
     else
-        print(">> ERROR: Failed to create Auto-Fishing HUD.")
+        print("> ERROR: Failed to create Auto-Fishing HUD.")
     end
 end
 
 local function unload()
-    if fishingIcon then
-        fishingIcon:destroy()
-        fishingIcon = nil
-    end
-    if wormCountHud then
-        wormCountHud:destroy()
-        wormCountHud = nil
-    end
+    if fishingIcon then HudLayout.unregisterElement(fishingIcon); fishingIcon:destroy(); fishingIcon = nil end
+    if wormCountHud then HudLayout.unregisterElement(wormCountHud); wormCountHud:destroy(); wormCountHud = nil end
+    if fishLabel then HudLayout.unregisterElement(fishLabel); fishLabel:destroy(); fishLabel = nil end
     destroyTimer("FishingMasterTimer")
-    print(">> Auto-Fishing HUD unloaded.")
+    print("> Auto-Fishing HUD unloaded.")
 end
 
 return {

@@ -1,8 +1,11 @@
--- Icon position on the screen.
-local ICON_POSITION_X = 50
-local ICON_POSITION_Y = 480
+-- Exercise / Training Script for Zerobot
+-- Author: SamuHell
 
--- Opacity for the icon when ON vs OFF.
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 12
+
+-- Opacity
 local OPACITY_ON = 1.0
 local OPACITY_OFF = 0.5
 
@@ -26,6 +29,7 @@ local DUMMY_IDS = { 28561, 28562, 28558, 28565, 28559, 28560, 28563, 28564, 6324
 -- Runtime state
 local isTrainingActive = false
 local trainingIcon = nil
+local trainLabel = nil
 local currentWeaponId = nil
 
 -- Forward declaration
@@ -228,10 +232,12 @@ toggleTraining = function()
     isTrainingActive = not isTrainingActive
     if isTrainingActive then
         trainingIcon:setOpacity(OPACITY_ON)
+        if trainLabel then trainLabel:setColor(80, 220, 80) end
         print(">> Exercise ENABLED.")
         performTrainingAction()
     else
         trainingIcon:setOpacity(OPACITY_OFF)
+        if trainLabel then trainLabel:setColor(160, 160, 160) end
         print(">> Exercise DISABLED.")
     end
 end
@@ -240,13 +246,22 @@ local function load()
     local weaponList = getWeaponListForVocation()
     local initialWeaponId = findNextWeapon(weaponList) or WEAPONS.CLUB[1]
 
-    trainingIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, initialWeaponId, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    trainingIcon = HUD.new(pos.x, pos.y, initialWeaponId, true)
+    trainLabel = HUD.new(pos.x + 36, pos.y + 8, "Train", true)
+
     if trainingIcon then
         trainingIcon:setOpacity(isTrainingActive and OPACITY_ON or OPACITY_OFF)
         trainingIcon:setCallback(toggleTraining)
+        HudLayout.registerElement(GROUP, SLOT, trainingIcon, 0, 0)
+
+        if trainLabel then
+            trainLabel:setColor(160, 160, 160)
+            trainLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, trainLabel, 36, 8)
+        end
 
         Game.registerEvent(Game.Events.TEXT_MESSAGE, onTextMessage)
-
         print(">> Exercise HUD loaded.")
         if isTrainingActive then
             performTrainingAction()
@@ -257,10 +272,8 @@ local function load()
 end
 
 local function unload()
-    if trainingIcon then
-        trainingIcon:destroy()
-        trainingIcon = nil
-    end
+    if trainingIcon then HudLayout.unregisterElement(trainingIcon); trainingIcon:destroy(); trainingIcon = nil end
+    if trainLabel then HudLayout.unregisterElement(trainLabel); trainLabel:destroy(); trainLabel = nil end
     Game.unregisterEvent(Game.Events.TEXT_MESSAGE, onTextMessage)
     print(">> Exercise HUD unloaded.")
 end

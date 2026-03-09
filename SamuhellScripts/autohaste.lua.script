@@ -1,4 +1,5 @@
 -- Vocation-Aware Haste Toggle HUD for Zerobot
+-- Author: SamuHell
 -- Creates a clickable icon that automatically selects the correct haste spell
 -- and will not cast while in a Protection Zone.
 
@@ -17,13 +18,13 @@ local RECAST_INTERVAL_MS = 100
 -- Item ID for the icon. Boots of Haste (3079) is a good choice.
 local ICON_ITEM_ID = 3079
 
--- Position of the icon on the screen.
-local ICON_POSITION_X = 10
-local ICON_POSITION_Y = 200
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 2
 
--- Opacity for the icon when ON vs OFF.
-local OPACITY_ON = 1.0  -- Fully visible
-local OPACITY_OFF = 0.5 -- Semi-transparent
+-- Opacity
+local OPACITY_ON = 1.0
+local OPACITY_OFF = 0.5
 -- ######################################################
 
 
@@ -32,6 +33,7 @@ local isAutoHasteActive = true
 
 -- This will hold our HUD object.
 local hasteIcon = nil
+local hasteLabel = nil
 
 -- This function is called when the HUD icon is clicked.
 local function toggleHaste()
@@ -39,13 +41,13 @@ local function toggleHaste()
     isAutoHasteActive = not isAutoHasteActive
 
     if isAutoHasteActive then
-        -- Set icon to fully visible and print a message.
         hasteIcon:setOpacity(OPACITY_ON)
-        print(">> Auto-Haste ENABLED.")
+        if hasteLabel then hasteLabel:setColor(80, 220, 80) end
+        print("> Auto-Haste ENABLED.")
     else
-        -- Set icon to semi-transparent and print a message.
         hasteIcon:setOpacity(OPACITY_OFF)
-        print(">> Auto-Haste DISABLED.")
+        if hasteLabel then hasteLabel:setColor(160, 160, 160) end
+        print("> Auto-Haste DISABLED.")
     end
 end
 
@@ -88,33 +90,33 @@ local function castHasteIfNeeded()
 end
 
 local function load()
-    -- Create the HUD icon using the item ID and position from the config.
-    hasteIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, ICON_ITEM_ID, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    hasteIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    hasteLabel = HUD.new(pos.x + 36, pos.y + 8, "Haste", true)
 
     if hasteIcon then
-        -- Set the icon's initial state to OFF (semi-transparent).
         hasteIcon:setOpacity(OPACITY_ON)
-
-        -- Assign our toggleHaste function to be called when the icon is clicked.
         hasteIcon:setCallback(toggleHaste)
+        HudLayout.registerElement(GROUP, SLOT, hasteIcon, 0, 0)
 
-        -- Create a recurring timer that calls castHasteIfNeeded.
+        if hasteLabel then
+            hasteLabel:setColor(80, 220, 80)
+            hasteLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, hasteLabel, 36, 8)
+        end
+
         Timer.new("HasteTimer", castHasteIfNeeded, RECAST_INTERVAL_MS, true)
-
-        -- Print a confirmation message in the Zerobot console.
-        print(">> Haste HUD loaded.")
+        print("> Haste HUD loaded.")
     else
-        print(">> ERROR: Failed to create Haste Toggle HUD.")
+        print("> ERROR: Failed to create Haste Toggle HUD.")
     end
 end
 
 local function unload()
-    if hasteIcon then
-        hasteIcon:destroy()
-        hasteIcon = nil
-    end
+    if hasteIcon then HudLayout.unregisterElement(hasteIcon); hasteIcon:destroy(); hasteIcon = nil end
+    if hasteLabel then HudLayout.unregisterElement(hasteLabel); hasteLabel:destroy(); hasteLabel = nil end
     destroyTimer("HasteTimer")
-    print(">> Haste HUD unloaded.")
+    print("> Haste HUD unloaded.")
 end
 
 return {

@@ -1,0 +1,175 @@
+-- Bot Status HUD
+-- Author: SamuHell
+-- Shows real-time bot status: HP/MP bars (color-coded), AutoAttack target, and CaveBot waypoint state.
+
+local UPDATE_INTERVAL_MS = 250
+
+-- Layout group and slots (managed by HudLayout)
+-- Uses the "info" group, slots 8-11 (after player stats)
+local GROUP = "info"
+local SLOT_TARGET  = 8
+local SLOT_CAVEBOT = 9
+local SLOT_HP      = 10
+local SLOT_MP      = 11
+
+local FONT_SIZE = 9.5
+
+-- ─────────────────────────────────────────────────────────────
+-- Color helpers
+-- ─────────────────────────────────────────────────────────────
+local function hpColor(pct)
+    if pct > 50 then
+        return 80, 220, 80
+    elseif pct > 25 then
+        return 255, 160, 30
+    else
+        return 220, 50, 50
+    end
+end
+
+local function mpColor(pct)
+    if pct > 40 then
+        return 80, 140, 255
+    else
+        return 180, 180, 255
+    end
+end
+
+local function deriveMax(current, pct)
+    if pct and pct > 0 then
+        return math.floor(current / pct * 100 + 0.5)
+    end
+    return current
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- HUD element handles
+-- ─────────────────────────────────────────────────────────────
+local hudHP       = nil
+local hudMP       = nil
+local hudCaveBot  = nil
+local hudTarget   = nil
+
+-- ─────────────────────────────────────────────────────────────
+-- Create a text HUD at a layout position
+-- ─────────────────────────────────────────────────────────────
+local function makeHUD(pos, initialText, r, g, b)
+    local h = HUD.new(pos.x, pos.y, initialText, true)
+    h:setFontSize(FONT_SIZE)
+    h:setColor(r, g, b)
+    return h
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Update logic
+-- ─────────────────────────────────────────────────────────────
+local function updateBotStatus()
+    if not Client.isConnected() then return end
+
+    -- HP
+    local hp    = Player.getHealth()        or 0
+    local hpPct = Player.getHealthPercent() or 100
+    local maxHp = deriveMax(hp, hpPct)
+    local r, g, b = hpColor(hpPct)
+    if hudHP then
+        hudHP:setText(string.format("HP: %d / %d", hp, maxHp))
+        hudHP:setColor(r, g, b)
+    end
+
+    -- MP
+    local mp    = Player.getMana()        or 0
+    local mpPct = Player.getManaPercent() or 100
+    local maxMp = deriveMax(mp, mpPct)
+    local mr, mg, mb = mpColor(mpPct)
+    if hudMP then
+        hudMP:setText(string.format("MP: %d / %d", mp, maxMp))
+        hudMP:setColor(mr, mg, mb)
+    end
+
+    -- AutoAttack target
+    local targetId   = Player.getTargetId()
+    local targetName = "Sem alvo"
+    if targetId and targetId ~= 0 then
+        local cr = Creature(targetId)
+        if cr then
+            local okName, n = pcall(function() return cr:getName() end)
+            if okName and n and n ~= "" then
+                local okHp,    crHp    = pcall(function() return cr:getHealth() end)
+                local okMaxHp, crMaxHp = pcall(function() return cr:getMaxHealth() end)
+                crHp    = (okHp    and crHp)    or 0
+                crMaxHp = (okMaxHp and crMaxHp) or 0
+                if crMaxHp > 0 then
+                    local pct = math.floor(crHp / crMaxHp * 100)
+                    targetName = string.format(">> %s  [%d%%]", n, pct)
+                else
+                    targetName = string.format(">> %s", n)
+                end
+            end
+        end
+    end
+    if hudTarget then
+        local noTarget = (targetName == "Sem alvo")
+        hudTarget:setText(string.format("Alvo: %s", targetName))
+        if noTarget then
+            hudTarget:setColor(160, 160, 160)
+        else
+            hudTarget:setColor(255, 80, 80)
+        end
+    end
+
+    -- CaveBot status
+    local wpId = CaveBot.getSelectedWaypointId()
+    local cbText, cbR, cbG, cbB
+
+    if wpId and wpId >= 0 then
+        cbText = string.format("CaveBot: ON  |  WP #%d", wpId)
+        cbR, cbG, cbB = 80, 220, 130
+    else
+        cbText = "CaveBot: OFF"
+        cbR, cbG, cbB = 160, 160, 160
+    end
+
+    if hudCaveBot then
+        hudCaveBot:setText(cbText)
+        hudCaveBot:setColor(cbR, cbG, cbB)
+    end
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Module API
+-- ─────────────────────────────────────────────────────────────
+local M = {}
+
+function M.load()
+    local pos
+
+    pos = HudLayout.getSlotPosition(GROUP, SLOT_TARGET)
+    hudTarget = makeHUD(pos, "Alvo: Sem alvo", 160, 160, 160)
+    HudLayout.registerElement(GROUP, SLOT_TARGET, hudTarget, 0, 0)
+
+    pos = HudLayout.getSlotPosition(GROUP, SLOT_CAVEBOT)
+    hudCaveBot = makeHUD(pos, "CaveBot: ---", 160, 160, 160)
+    HudLayout.registerElement(GROUP, SLOT_CAVEBOT, hudCaveBot, 0, 0)
+
+    pos = HudLayout.getSlotPosition(GROUP, SLOT_HP)
+    hudHP = makeHUD(pos, "HP: --- / ---", 80, 220, 80)
+    HudLayout.registerElement(GROUP, SLOT_HP, hudHP, 0, 0)
+
+    pos = HudLayout.getSlotPosition(GROUP, SLOT_MP)
+    hudMP = makeHUD(pos, "MP: --- / ---", 80, 140, 255)
+    HudLayout.registerElement(GROUP, SLOT_MP, hudMP, 0, 0)
+
+    Timer.new("BotStatusTimer", updateBotStatus, UPDATE_INTERVAL_MS, true)
+    print(">> Bot Status HUD loaded.")
+end
+
+function M.unload()
+    destroyTimer("BotStatusTimer")
+    if hudHP      then HudLayout.unregisterElement(hudHP);      hudHP:destroy();      hudHP      = nil end
+    if hudMP      then HudLayout.unregisterElement(hudMP);      hudMP:destroy();      hudMP      = nil end
+    if hudCaveBot then HudLayout.unregisterElement(hudCaveBot); hudCaveBot:destroy(); hudCaveBot = nil end
+    if hudTarget  then HudLayout.unregisterElement(hudTarget);  hudTarget:destroy();  hudTarget  = nil end
+    print(">> Bot Status HUD unloaded.")
+end
+
+return M

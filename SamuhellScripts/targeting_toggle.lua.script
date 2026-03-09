@@ -1,0 +1,73 @@
+-- Targeting Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Toggles the native Targeting system on/off via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 3280  -- Sword
+local GROUP = "bot"
+local SLOT = 1
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.5
+-- ######################################################
+
+local targetingIcon = nil
+local targetingLabel = nil
+
+local function updateIconState()
+    if not targetingIcon then return end
+    if Engine.isTargetingEnabled() then
+        targetingIcon:setOpacity(OPACITY_ON)
+        if targetingLabel then targetingLabel:setColor(80, 220, 80) end
+    else
+        targetingIcon:setOpacity(OPACITY_OFF)
+        if targetingLabel then targetingLabel:setColor(160, 160, 160) end
+    end
+end
+
+local function toggleTargeting()
+    local current = Engine.isTargetingEnabled()
+    Engine.enableTargeting(not current)
+    Timer.new("UpdateTargetingDelay", function()
+        updateIconState()
+        if not current then
+            print("> Targeting ENABLED.")
+        else
+            print("> Targeting DISABLED.")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    targetingIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    targetingLabel = HUD.new(pos.x + 36, pos.y + 8, "Target", true)
+
+    if targetingIcon then
+        targetingIcon:setCallback(toggleTargeting)
+        HudLayout.registerElement(GROUP, SLOT, targetingIcon, 0, 0)
+
+        if targetingLabel then
+            targetingLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, targetingLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("TargetingSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Targeting Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Targeting Toggle HUD.")
+    end
+end
+
+local function unload()
+    if targetingIcon then HudLayout.unregisterElement(targetingIcon); targetingIcon:destroy(); targetingIcon = nil end
+    if targetingLabel then HudLayout.unregisterElement(targetingLabel); targetingLabel:destroy(); targetingLabel = nil end
+    destroyTimer("TargetingSyncTimer")
+    print("> Targeting Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

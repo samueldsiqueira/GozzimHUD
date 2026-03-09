@@ -1,0 +1,142 @@
+-- Profile Switcher HUD for Zerobot
+-- Author: SamuHell
+-- Shows current profiles for Healing, Targeting, Magic Shooter, and Equipment.
+-- Click to cycle through profiles (0-9). Displays active profile name on HUD.
+
+-- #################### CONFIGURATION ####################
+local GROUP = "profiles"
+
+local LABEL_OFFSET_X = 36
+local LABEL_OFFSET_Y = 8
+local NAME_OFFSET_X = 36
+local NAME_OFFSET_Y = 20
+
+local SYNC_INTERVAL_MS = 500
+
+-- Icon IDs representing each system
+local HEALING_ICON  = 266   -- Health Potion
+local TARGETING_ICON = 3280 -- Sword
+local SHOOTER_ICON  = 3059  -- Wand
+local EQUIP_ICON    = 3392  -- Golden Armor
+-- ######################################################
+
+-- HUD element storage
+local icons = {}
+local labels = {}
+local profileNames = {}
+
+-- Profile system definitions
+local SYSTEMS = {
+    {
+        name = "Heal",
+        iconId = HEALING_ICON,
+        getProfile = function() return Engine.healingGetProfile() end,
+        getProfileName = function(i) return Engine.healingGetProfileName(i) end,
+        switchProfile = function(i) Engine.healingSwitchProfile(i) end,
+    },
+    {
+        name = "Target",
+        iconId = TARGETING_ICON,
+        getProfile = function() return Engine.targetingGetProfile() end,
+        getProfileName = function(i) return Engine.targetingGetProfileName(i) end,
+        switchProfile = function(i) Engine.targetingSwitchProfile(i) end,
+    },
+    {
+        name = "Shooter",
+        iconId = SHOOTER_ICON,
+        getProfile = function() return Engine.magicShooterGetProfile() end,
+        getProfileName = function(i) return Engine.magicShooterGetProfileName(i) end,
+        switchProfile = function(i) Engine.magicShooterSwitchProfile(i) end,
+    },
+    {
+        name = "Equip",
+        iconId = EQUIP_ICON,
+        getProfile = function() return Engine.equipmentGetProfile() end,
+        getProfileName = function(i) return Engine.equipmentGetProfileName(i) end,
+        switchProfile = function(i) Engine.equipmentSwitchProfile(i) end,
+    },
+}
+
+-- Cycle to next profile (0-9, wraps around)
+local function createCycleHandler(systemIndex)
+    return function()
+        local sys = SYSTEMS[systemIndex]
+        local current = sys.getProfile()
+        local next = (current + 1) % 10
+        sys.switchProfile(next)
+
+        Timer.new("ProfileSwitch_" .. systemIndex, function()
+            local newIdx = sys.getProfile()
+            local newName = sys.getProfileName(newIdx) or ("Profile " .. newIdx)
+            if profileNames[systemIndex] then
+                profileNames[systemIndex]:setText(newName)
+            end
+            print("> " .. sys.name .. " profile switched to: " .. newName)
+        end, 150, false)
+    end
+end
+
+-- Update all profile name displays
+local function updateAllProfiles()
+    for i, sys in ipairs(SYSTEMS) do
+        if profileNames[i] then
+            local idx = sys.getProfile()
+            local name = sys.getProfileName(idx) or ("Profile " .. idx)
+            profileNames[i]:setText(name)
+        end
+    end
+end
+
+local function load()
+    for i, sys in ipairs(SYSTEMS) do
+        local slot = i - 1
+        local pos = HudLayout.getSlotPosition(GROUP, slot)
+
+        -- Create icon
+        icons[i] = HUD.new(pos.x, pos.y, sys.iconId, true)
+        if icons[i] then
+            icons[i]:setCallback(createCycleHandler(i))
+            icons[i]:setScale(0.8)
+            HudLayout.registerElement(GROUP, slot, icons[i], 0, 0)
+        end
+
+        -- Create system label
+        labels[i] = HUD.new(pos.x + LABEL_OFFSET_X, pos.y + LABEL_OFFSET_Y, sys.name, true)
+        if labels[i] then
+            labels[i]:setColor(200, 200, 200)
+            labels[i]:setFontSize(8)
+            HudLayout.registerElement(GROUP, slot, labels[i], LABEL_OFFSET_X, LABEL_OFFSET_Y)
+        end
+
+        -- Create profile name display
+        local idx = sys.getProfile()
+        local name = sys.getProfileName(idx) or ("Profile " .. idx)
+        profileNames[i] = HUD.new(pos.x + NAME_OFFSET_X, pos.y + NAME_OFFSET_Y, name, true)
+        if profileNames[i] then
+            profileNames[i]:setColor(100, 200, 255)
+            profileNames[i]:setFontSize(8)
+            HudLayout.registerElement(GROUP, slot, profileNames[i], NAME_OFFSET_X, NAME_OFFSET_Y)
+        end
+    end
+
+    Timer.new("ProfileSyncTimer", updateAllProfiles, SYNC_INTERVAL_MS, true)
+    print("> Profile Switcher HUD loaded. Click icons to cycle profiles.")
+end
+
+local function unload()
+    for i = 1, #SYSTEMS do
+        if icons[i] then HudLayout.unregisterElement(icons[i]); icons[i]:destroy(); icons[i] = nil end
+        if labels[i] then HudLayout.unregisterElement(labels[i]); labels[i]:destroy(); labels[i] = nil end
+        if profileNames[i] then HudLayout.unregisterElement(profileNames[i]); profileNames[i]:destroy(); profileNames[i] = nil end
+    end
+    destroyTimer("ProfileSyncTimer")
+    for i = 1, #SYSTEMS do
+        destroyTimer("ProfileSwitch_" .. i)
+    end
+    print("> Profile Switcher HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

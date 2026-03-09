@@ -1,13 +1,14 @@
 -- Auto Door Opener for Zerobot
+-- Author: SamuHell
 -- Combines a key-press handler for responsiveness and a polling loop for seamless running.
 
 -- #################### CONFIGURATION ####################
 -- Item ID for the HUD icon.
 local ICON_ITEM_ID = 12305
 
--- Position of the icon on the screen.
-local ICON_POSITION_X = 10
-local ICON_POSITION_Y = 120
+-- Layout group and slot (managed by HudLayout)
+local GROUP = "scripts"
+local SLOT = 0
 
 -- How often the polling loop checks your movement (in milliseconds).
 local POLLING_RATE_MS = 50
@@ -36,6 +37,7 @@ local doorsSet = {
 -- State tracking variables
 local isAutoDoorActive = true
 local autoDoorIcon = nil
+local doorLabel = nil
 local lastPosition = nil
 
 -- This function is called when the HUD icon is clicked.
@@ -43,10 +45,12 @@ local function toggleAutoDoor()
     isAutoDoorActive = not isAutoDoorActive
     if isAutoDoorActive then
         autoDoorIcon:setOpacity(OPACITY_ON)
-        print(">> Auto Door Opener ENABLED.")
+        if doorLabel then doorLabel:setColor(80, 220, 80) end
+        print("> Auto Door Opener ENABLED.")
     else
         autoDoorIcon:setOpacity(OPACITY_OFF)
-        print(">> Auto Door Opener DISABLED.")
+        if doorLabel then doorLabel:setColor(160, 160, 160) end
+        print("> Auto Door Opener DISABLED.")
     end
 end
 
@@ -150,33 +154,48 @@ local function mainDoorLoop()
 end
 
 local function load()
-    autoDoorIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, ICON_ITEM_ID, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    autoDoorIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    doorLabel = HUD.new(pos.x + 36, pos.y + 8, "Doors", true)
 
     if autoDoorIcon then
         autoDoorIcon:setOpacity(OPACITY_ON)
         autoDoorIcon:setCallback(toggleAutoDoor)
+        HudLayout.registerElement(GROUP, SLOT, autoDoorIcon, 0, 0)
+
+        if doorLabel then
+            doorLabel:setColor(80, 220, 80)
+            doorLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, doorLabel, 36, 8)
+        end
 
         -- Register BOTH systems to run in parallel.
         Game.registerEvent(Game.Events.HOTKEY_SHORTCUT_PRESS, onHotkeyPress) -- System 1
         Timer.new("ProactiveDoorTimer", mainDoorLoop, POLLING_RATE_MS, true) -- System 2
 
-        print(">> Auto Door Opener HUD loaded.")
+        print("> Auto Door Opener HUD loaded.")
     else
-        print(">> ERROR: Failed to create Auto Door Opener HUD.")
+        print("> ERROR: Failed to create Auto Door Opener HUD.")
     end
 end
 
 local function unload()
     if autoDoorIcon then
+        HudLayout.unregisterElement(autoDoorIcon)
         autoDoorIcon:destroy()
         autoDoorIcon = nil
+    end
+    if doorLabel then
+        HudLayout.unregisterElement(doorLabel)
+        doorLabel:destroy()
+        doorLabel = nil
     end
 
     Game.unregisterEvent(Game.Events.HOTKEY_SHORTCUT_PRESS, onHotkeyPress)
 
     destroyTimer("ProactiveDoorTimer")
 
-    print(">> Auto Door Opener HUD unloaded.")
+    print("> Auto Door Opener HUD unloaded.")
 end
 
 return {

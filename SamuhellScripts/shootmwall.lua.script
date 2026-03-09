@@ -1,4 +1,5 @@
 -- Magic Wall Hotkey Script with HUD
+-- Author: SamuHell
 -- Uses manual coordinate calculation to center the text below the icon.
 
 -- #################### CONFIGURATION ####################
@@ -8,25 +9,22 @@ local HOTKEY_COMBINATION = "x"
 -- The Item ID for the Magic Wall Rune.
 local MAGIC_WALL_RUNE_ID = 3180
 
--- Position of the icon on the screen.
-local ICON_POSITION_X = 90
-local ICON_POSITION_Y = 240
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 7
 
--- ## --- Auto-calculated Text Position --- ##
--- We manually calculate the text position to center it under the 32x32 icon.
+-- ## --- Auto-calculated Text Position offsets --- ##
 local ICON_WIDTH = 32
 local ICON_HEIGHT = 32
-local APPROX_CHAR_WIDTH = 6 -- Estimated average width of a character in the font.
+local APPROX_CHAR_WIDTH = 6
 local TEXT_WIDTH = string.len(HOTKEY_COMBINATION) * APPROX_CHAR_WIDTH
-
--- X-Position: Start at the icon's center, then move left by half the text's width.
-local TEXT_POSITION_X = (ICON_POSITION_X + ICON_WIDTH / 2) - (TEXT_WIDTH / 2) - 1
--- Y-Position: Start at the icon's Y, add the icon's height, plus a small margin.
-local TEXT_POSITION_Y = ICON_POSITION_Y + ICON_HEIGHT - 16
+local TEXT_OFFSET_X = (ICON_WIDTH / 2) - (TEXT_WIDTH / 2) - 1
+local TEXT_OFFSET_Y = ICON_HEIGHT - 16
 -- ######################################################
 
 local magicWallIcon = nil
 local hotkeyText = nil
+local mwallLabel = nil
 
 -- This is the main function that performs the action.
 local function shootMagicWall()
@@ -85,38 +83,39 @@ local function onHotkeyPress(key, modifier)
 end
 
 local function load()
-    -- Create the item icon for the HUD.
-    magicWallIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, MAGIC_WALL_RUNE_ID, true)
-    -- Create the text element for the HUD using our calculated coordinates.
-    hotkeyText = HUD.new(TEXT_POSITION_X, TEXT_POSITION_Y, HOTKEY_COMBINATION, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    magicWallIcon = HUD.new(pos.x, pos.y, MAGIC_WALL_RUNE_ID, true)
+    hotkeyText = HUD.new(pos.x + TEXT_OFFSET_X, pos.y + TEXT_OFFSET_Y, HOTKEY_COMBINATION, true)
+    mwallLabel = HUD.new(pos.x + 36, pos.y + 8, "MWall", true)
 
     if magicWallIcon and hotkeyText then
-        -- Make the item icon clickable.
         magicWallIcon:setCallback(shootMagicWall)
+        HudLayout.registerElement(GROUP, SLOT, magicWallIcon, 0, 0)
+        HudLayout.registerElement(GROUP, SLOT, hotkeyText, TEXT_OFFSET_X, TEXT_OFFSET_Y)
 
-        -- Style the hotkey text.
         hotkeyText:setColor(200, 200, 200)
+
+        if mwallLabel then
+            mwallLabel:setColor(200, 200, 200)
+            mwallLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, mwallLabel, 36, 8)
+        end
 
         -- Register the event listener for the keyboard hotkey.
         Game.registerEvent(Game.Events.HOTKEY_SHORTCUT_PRESS, onHotkeyPress)
 
-        print(">> Magic Wall Hotkey HUD loaded. Press '" .. HOTKEY_COMBINATION .. "' or click the icon.")
+        print("> Magic Wall Hotkey HUD loaded. Press '" .. HOTKEY_COMBINATION .. "' or click the icon.")
     else
-        print(">> ERROR: Failed to create Magic Wall Hotkey HUD.")
+        print("> ERROR: Failed to create Magic Wall Hotkey HUD.")
     end
 end
 
 local function unload()
-    if magicWallIcon then
-        magicWallIcon:destroy()
-        magicWallIcon = nil
-    end
-    if hotkeyText then
-        hotkeyText:destroy()
-        hotkeyText = nil
-    end
+    if magicWallIcon then HudLayout.unregisterElement(magicWallIcon); magicWallIcon:destroy(); magicWallIcon = nil end
+    if hotkeyText then HudLayout.unregisterElement(hotkeyText); hotkeyText:destroy(); hotkeyText = nil end
+    if mwallLabel then HudLayout.unregisterElement(mwallLabel); mwallLabel:destroy(); mwallLabel = nil end
     Game.unregisterEvent(Game.Events.HOTKEY_SHORTCUT_PRESS, onHotkeyPress)
-    print(">> Magic Wall Hotkey HUD unloaded.")
+    print("> Magic Wall Hotkey HUD unloaded.")
 end
 
 return {

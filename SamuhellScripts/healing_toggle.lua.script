@@ -1,0 +1,73 @@
+-- Healing Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Toggles the native Healing system on/off via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 266  -- Health Potion
+local GROUP = "bot"
+local SLOT = 0
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.5
+-- ######################################################
+
+local healingIcon = nil
+local healingLabel = nil
+
+local function updateIconState()
+    if not healingIcon then return end
+    if Engine.isHealingEnabled() then
+        healingIcon:setOpacity(OPACITY_ON)
+        if healingLabel then healingLabel:setColor(80, 220, 80) end
+    else
+        healingIcon:setOpacity(OPACITY_OFF)
+        if healingLabel then healingLabel:setColor(160, 160, 160) end
+    end
+end
+
+local function toggleHealing()
+    local current = Engine.isHealingEnabled()
+    Engine.enableHealing(not current)
+    Timer.new("UpdateHealingDelay", function()
+        updateIconState()
+        if not current then
+            print("> Healing ENABLED.")
+        else
+            print("> Healing DISABLED.")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    healingIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    healingLabel = HUD.new(pos.x + 36, pos.y + 8, "Healing", true)
+
+    if healingIcon then
+        healingIcon:setCallback(toggleHealing)
+        HudLayout.registerElement(GROUP, SLOT, healingIcon, 0, 0)
+
+        if healingLabel then
+            healingLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, healingLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("HealingSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Healing Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Healing Toggle HUD.")
+    end
+end
+
+local function unload()
+    if healingIcon then HudLayout.unregisterElement(healingIcon); healingIcon:destroy(); healingIcon = nil end
+    if healingLabel then HudLayout.unregisterElement(healingLabel); healingLabel:destroy(); healingLabel = nil end
+    destroyTimer("HealingSyncTimer")
+    print("> Healing Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

@@ -1,0 +1,273 @@
+-- HUD Layout Manager for Zerobot
+-- Author: SamuHell
+-- Centralized position manager for all HUD groups.
+-- Supports repositioning via click-modal and persists positions per character.
+
+local STORAGE_FOLDER = "SamuhellScripts/Storage/"
+
+-- ─────────────────────────────────────────────────────────────
+-- Group definitions with slot layout rules
+-- ─────────────────────────────────────────────────────────────
+-- Each group has a default baseX/baseY and layout parameters.
+-- Scripts query positions via HudLayout.getSlotPosition(group, slot)
+
+local GROUP_DEFAULTS = {
+    info = {
+        baseX = 10,
+        baseY = 10,
+        rowHeight = 16,   -- text-only, compact
+        columns = 1,
+        colWidth = 0,
+        label = "[ Info ]",
+    },
+    scripts = {
+        baseX = 10,
+        baseY = 170,      -- below info group
+        rowHeight = 40,    -- icon (32px) + spacing
+        columns = 1,
+        colWidth = 130,
+        label = "[ Scripts ]",
+    },
+    bot = {
+        baseX = 200,
+        baseY = 10,
+        rowHeight = 40,
+        columns = 1,
+        colWidth = 130,
+        label = "[ Bot ]",
+    },
+    profiles = {
+        baseX = 200,
+        baseY = 310,
+        rowHeight = 40,
+        columns = 1,
+        colWidth = 130,
+        label = "[ Profiles ]",
+    },
+}
+
+-- ─────────────────────────────────────────────────────────────
+-- Runtime state
+-- ─────────────────────────────────────────────────────────────
+local groups = {}              -- runtime copy with current positions
+local registeredElements = {}  -- {group, slot, hud, offsetX, offsetY}
+local headerHuds = {}          -- header HUD elements per group
+local moveModal = nil          -- active reposition modal
+
+-- ─────────────────────────────────────────────────────────────
+-- Init groups from defaults
+-- ─────────────────────────────────────────────────────────────
+for name, def in pairs(GROUP_DEFAULTS) do
+    groups[name] = {
+        baseX = def.baseX,
+        baseY = def.baseY,
+        rowHeight = def.rowHeight,
+        columns = def.columns,
+        colWidth = def.colWidth,
+        label = def.label,
+    }
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Persistence: save/load group positions
+-- ─────────────────────────────────────────────────────────────
+local function getStorageFileName()
+    local worldName = Client.getWorldName()
+    local charName = Player.getName()
+    if not worldName or not charName then return nil end
+    worldName = worldName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
+    charName = charName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
+    return string.format("%s_%s_hud_layout.json", worldName, charName)
+end
+
+local function savePositions()
+    local fileName = getStorageFileName()
+    if not fileName then return end
+    local data = {}
+    for name, g in pairs(groups) do
+        data[name] = { baseX = g.baseX, baseY = g.baseY }
+    end
+    local filePath = Engine.getScriptsDirectory() .. "/" .. STORAGE_FOLDER .. fileName
+    local file = io.open(filePath, "w")
+    if file then
+        file:write(JSON.encode(data))
+        file:close()
+    end
+end
+
+local function loadPositions()
+    local fileName = getStorageFileName()
+    if not fileName then return false end
+    local filePath = Engine.getScriptsDirectory() .. "/" .. STORAGE_FOLDER .. fileName
+    local file = io.open(filePath, "r")
+    if file then
+        local content = file:read("*a")
+        file:close()
+        local success, data = pcall(JSON.decode, content)
+        if success and type(data) == "table" then
+            for name, pos in pairs(data) do
+                if groups[name] then
+                    groups[name].baseX = pos.baseX or groups[name].baseX
+                    groups[name].baseY = pos.baseY or groups[name].baseY
+                end
+            end
+            return true
+        end
+    end
+    return false
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Core API: get slot position
+-- ─────────────────────────────────────────────────────────────
+local function getSlotPosition(groupName, slotIndex)
+    local g = groups[groupName]
+    if not g then
+        print("!! HudLayout: Unknown group '" .. tostring(groupName) .. "'")
+        return { x = 0, y = 0 }
+    end
+    -- Slot 0 is the first slot BELOW the header (header takes ~20px)
+    local headerOffset = 20
+    local row = math.floor(slotIndex / g.columns)
+    local col = slotIndex % g.columns
+    return {
+        x = g.baseX + col * g.colWidth,
+        y = g.baseY + headerOffset + row * g.rowHeight,
+    }
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Element registration for live repositioning
+-- ─────────────────────────────────────────────────────────────
+local function registerElement(groupName, slotIndex, hudElement, offsetX, offsetY)
+    if not hudElement then return end
+    table.insert(registeredElements, {
+        group = groupName,
+        slot = slotIndex,
+        hud = hudElement,
+        offsetX = offsetX or 0,
+        offsetY = offsetY or 0,
+    })
+end
+
+local function unregisterElement(hudElement)
+    for i = #registeredElements, 1, -1 do
+        if registeredElements[i].hud == hudElement then
+            table.remove(registeredElements, i)
+        end
+    end
+end
+
+-- Reposition all registered elements of a group
+local function repositionGroup(groupName)
+    for _, elem in ipairs(registeredElements) do
+        if elem.group == groupName then
+            local pos = getSlotPosition(elem.group, elem.slot)
+            elem.hud:setPos(pos.x + elem.offsetX, pos.y + elem.offsetY)
+        end
+    end
+    -- Reposition header
+    if headerHuds[groupName] then
+        local g = groups[groupName]
+        headerHuds[groupName]:setPos(g.baseX, g.baseY)
+    end
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Reposition Modal
+-- ─────────────────────────────────────────────────────────────
+local MOVE_STEP = 20
+
+local function openMoveModal(groupName)
+    if moveModal then
+        moveModal:destroy()
+        moveModal = nil
+    end
+
+    local g = groups[groupName]
+    if not g then return end
+
+    local info = string.format("%s  |  X: %d  Y: %d", g.label, g.baseX, g.baseY)
+    moveModal = CustomModalWindow("Move " .. g.label, info)
+
+    moveModal:addButton("Up [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Down [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Left [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Right [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Reset Default")
+    moveModal:addButton("Save & Close")
+
+    moveModal:setCallback(function(buttonIndex)
+        if buttonIndex == 0 then
+            g.baseY = g.baseY - MOVE_STEP
+        elseif buttonIndex == 1 then
+            g.baseY = g.baseY + MOVE_STEP
+        elseif buttonIndex == 2 then
+            g.baseX = g.baseX - MOVE_STEP
+        elseif buttonIndex == 3 then
+            g.baseX = g.baseX + MOVE_STEP
+        elseif buttonIndex == 4 then
+            -- Reset to default
+            local def = GROUP_DEFAULTS[groupName]
+            g.baseX = def.baseX
+            g.baseY = def.baseY
+        elseif buttonIndex == 5 then
+            -- Save & Close
+            savePositions()
+            if moveModal then moveModal:destroy(); moveModal = nil end
+            return
+        end
+        repositionGroup(groupName)
+        -- Reopen modal with updated coords
+        openMoveModal(groupName)
+    end)
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Header HUDs (clickable group labels)
+-- ─────────────────────────────────────────────────────────────
+local function createHeaders()
+    for name, g in pairs(groups) do
+        headerHuds[name] = HUD.new(g.baseX, g.baseY, g.label, true)
+        if headerHuds[name] then
+            headerHuds[name]:setColor(255, 180, 50)
+            headerHuds[name]:setFontSize(9)
+            headerHuds[name]:setCallback(function()
+                openMoveModal(name)
+            end)
+        end
+    end
+end
+
+local function destroyHeaders()
+    for name, h in pairs(headerHuds) do
+        if h then h:destroy() end
+    end
+    headerHuds = {}
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- Module API
+-- ─────────────────────────────────────────────────────────────
+local M = {}
+
+function M.load()
+    loadPositions()
+    createHeaders()
+    print(">> HUD Layout Manager loaded.")
+end
+
+function M.unload()
+    if moveModal then moveModal:destroy(); moveModal = nil end
+    destroyHeaders()
+    registeredElements = {}
+    print(">> HUD Layout Manager unloaded.")
+end
+
+-- Public API (set globally after load)
+M.getSlotPosition = getSlotPosition
+M.registerElement = registerElement
+M.unregisterElement = unregisterElement
+M.savePositions = savePositions
+
+return M

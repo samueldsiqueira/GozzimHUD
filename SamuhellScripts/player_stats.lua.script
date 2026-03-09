@@ -1,0 +1,177 @@
+-- Player Stats HUD for Zerobot
+-- Author: SamuHell
+-- Displays real-time player information: Stamina, Capacity, Soul, XP Boost, Level %, Gold.
+
+-- #################### CONFIGURATION ####################
+local UPDATE_INTERVAL_MS = 500
+
+-- Layout group and slots (managed by HudLayout)
+local GROUP = "info"
+local SLOT_STAM = 2
+local SLOT_CAP  = 3
+local SLOT_SOUL = 4
+local SLOT_XP   = 5
+local SLOT_LV   = 6
+local SLOT_GOLD = 7
+
+local FONT_SIZE = 9
+
+-- Colors
+local COLOR_LABEL = {r = 180, g = 180, b = 180}
+local COLOR_GREEN = {r = 80, g = 220, b = 80}
+local COLOR_YELLOW = {r = 255, g = 220, b = 50}
+local COLOR_RED = {r = 255, g = 80, b = 80}
+local COLOR_CYAN = {r = 100, g = 200, b = 255}
+-- ######################################################
+
+-- HUD elements
+local staminaHud = nil
+local capacityHud = nil
+local soulHud = nil
+local xpBoostHud = nil
+local levelHud = nil
+local goldHud = nil
+
+-- Helper: format stamina from minutes to HH:MM
+local function formatStamina(minutes)
+    local hours = math.floor(minutes / 60)
+    local mins = minutes % 60
+    return string.format("%02d:%02d", hours, mins)
+end
+
+-- Helper: format capacity from oz to readable
+local function formatCapacity(cap)
+    if cap >= 1000 then
+        return string.format("%.1fk", cap / 1000)
+    end
+    return tostring(cap)
+end
+
+-- Helper: format gold balance
+local function formatGold(gold)
+    if gold >= 1000000 then
+        return string.format("%.2fkk", gold / 1000000)
+    elseif gold >= 1000 then
+        return string.format("%.1fk", gold / 1000)
+    end
+    return tostring(gold)
+end
+
+-- Helper: format XP boost time from seconds
+local function formatXpBoost(seconds)
+    if seconds <= 0 then return "OFF" end
+    local mins = math.floor(seconds / 60)
+    local secs = seconds % 60
+    return string.format("%02d:%02d", mins, secs)
+end
+
+-- Stamina color: green > 39h, yellow > 14h, red < 14h
+local function staminaColor(minutes)
+    if minutes >= 39 * 60 then
+        return COLOR_GREEN
+    elseif minutes >= 14 * 60 then
+        return COLOR_YELLOW
+    else
+        return COLOR_RED
+    end
+end
+
+-- Update all stat displays
+local function updateStats()
+    if staminaHud then
+        local stamina = Player.getStamina() or 0
+        staminaHud:setText("Stam: " .. formatStamina(stamina))
+        local c = staminaColor(stamina)
+        staminaHud:setColor(c.r, c.g, c.b)
+    end
+
+    if capacityHud then
+        local cap = Player.getCapacity() or 0
+        capacityHud:setText("Cap: " .. formatCapacity(cap))
+        if cap < 100 then
+            capacityHud:setColor(COLOR_RED.r, COLOR_RED.g, COLOR_RED.b)
+        else
+            capacityHud:setColor(COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b)
+        end
+    end
+
+    if soulHud then
+        local soul = Player.getSoulPoints() or 0
+        soulHud:setText("Soul: " .. soul)
+        if soul < 50 then
+            soulHud:setColor(COLOR_YELLOW.r, COLOR_YELLOW.g, COLOR_YELLOW.b)
+        else
+            soulHud:setColor(COLOR_GREEN.r, COLOR_GREEN.g, COLOR_GREEN.b)
+        end
+    end
+
+    if xpBoostHud then
+        local boost = Player.getXpBoostTime() or 0
+        xpBoostHud:setText("XP: " .. formatXpBoost(boost))
+        if boost > 0 then
+            xpBoostHud:setColor(COLOR_GREEN.r, COLOR_GREEN.g, COLOR_GREEN.b)
+        else
+            xpBoostHud:setColor(COLOR_LABEL.r, COLOR_LABEL.g, COLOR_LABEL.b)
+        end
+    end
+
+    if levelHud then
+        local level = Player.getLevel() or 0
+        local pct = Player.getLevelPercent() or 0
+        levelHud:setText("Lv: " .. level .. " (" .. pct .. "%)")
+        levelHud:setColor(COLOR_CYAN.r, COLOR_CYAN.g, COLOR_CYAN.b)
+    end
+
+    if goldHud then
+        local gold = Player.getTotalGoldBalance() or 0
+        goldHud:setText("Gold: " .. formatGold(gold))
+        goldHud:setColor(COLOR_YELLOW.r, COLOR_YELLOW.g, COLOR_YELLOW.b)
+    end
+end
+
+local function load()
+    local p
+
+    p = HudLayout.getSlotPosition(GROUP, SLOT_STAM)
+    staminaHud = HUD.new(p.x, p.y, "Stam: --:--", true)
+    if staminaHud then staminaHud:setFontSize(FONT_SIZE); HudLayout.registerElement(GROUP, SLOT_STAM, staminaHud, 0, 0) end
+
+    p = HudLayout.getSlotPosition(GROUP, SLOT_CAP)
+    capacityHud = HUD.new(p.x, p.y, "Cap: ---", true)
+    if capacityHud then capacityHud:setFontSize(FONT_SIZE); HudLayout.registerElement(GROUP, SLOT_CAP, capacityHud, 0, 0) end
+
+    p = HudLayout.getSlotPosition(GROUP, SLOT_SOUL)
+    soulHud = HUD.new(p.x, p.y, "Soul: --", true)
+    if soulHud then soulHud:setFontSize(FONT_SIZE); HudLayout.registerElement(GROUP, SLOT_SOUL, soulHud, 0, 0) end
+
+    p = HudLayout.getSlotPosition(GROUP, SLOT_XP)
+    xpBoostHud = HUD.new(p.x, p.y, "XP: OFF", true)
+    if xpBoostHud then xpBoostHud:setFontSize(FONT_SIZE); HudLayout.registerElement(GROUP, SLOT_XP, xpBoostHud, 0, 0) end
+
+    p = HudLayout.getSlotPosition(GROUP, SLOT_LV)
+    levelHud = HUD.new(p.x, p.y, "Lv: -- (0%)", true)
+    if levelHud then levelHud:setFontSize(FONT_SIZE); HudLayout.registerElement(GROUP, SLOT_LV, levelHud, 0, 0) end
+
+    p = HudLayout.getSlotPosition(GROUP, SLOT_GOLD)
+    goldHud = HUD.new(p.x, p.y, "Gold: ---", true)
+    if goldHud then goldHud:setFontSize(FONT_SIZE); HudLayout.registerElement(GROUP, SLOT_GOLD, goldHud, 0, 0) end
+
+    Timer.new("PlayerStatsTimer", updateStats, UPDATE_INTERVAL_MS, true)
+    print("> Player Stats HUD loaded.")
+end
+
+local function unload()
+    if staminaHud then HudLayout.unregisterElement(staminaHud); staminaHud:destroy(); staminaHud = nil end
+    if capacityHud then HudLayout.unregisterElement(capacityHud); capacityHud:destroy(); capacityHud = nil end
+    if soulHud then HudLayout.unregisterElement(soulHud); soulHud:destroy(); soulHud = nil end
+    if xpBoostHud then HudLayout.unregisterElement(xpBoostHud); xpBoostHud:destroy(); xpBoostHud = nil end
+    if levelHud then HudLayout.unregisterElement(levelHud); levelHud:destroy(); levelHud = nil end
+    if goldHud then HudLayout.unregisterElement(goldHud); goldHud:destroy(); goldHud = nil end
+    destroyTimer("PlayerStatsTimer")
+    print("> Player Stats HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

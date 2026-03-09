@@ -1,0 +1,73 @@
+-- Equipment Toggle HUD for Zerobot
+-- Author: SamuHell
+-- Toggles the native Equipment Manager on/off via clickable icon.
+
+-- #################### CONFIGURATION ####################
+local ICON_ITEM_ID = 3392  -- Golden Armor
+local GROUP = "bot"
+local SLOT = 3
+local SYNC_INTERVAL_MS = 200
+local OPACITY_ON  = 1.0
+local OPACITY_OFF = 0.5
+-- ######################################################
+
+local equipIcon = nil
+local equipLabel = nil
+
+local function updateIconState()
+    if not equipIcon then return end
+    if Engine.isEquipmentEnabled() then
+        equipIcon:setOpacity(OPACITY_ON)
+        if equipLabel then equipLabel:setColor(80, 220, 80) end
+    else
+        equipIcon:setOpacity(OPACITY_OFF)
+        if equipLabel then equipLabel:setColor(160, 160, 160) end
+    end
+end
+
+local function toggleEquipment()
+    local current = Engine.isEquipmentEnabled()
+    Engine.enableEquipment(not current)
+    Timer.new("UpdateEquipDelay", function()
+        updateIconState()
+        if not current then
+            print("> Equipment Manager ENABLED.")
+        else
+            print("> Equipment Manager DISABLED.")
+        end
+    end, 100, false)
+end
+
+local function load()
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    equipIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    equipLabel = HUD.new(pos.x + 36, pos.y + 8, "Equip", true)
+
+    if equipIcon then
+        equipIcon:setCallback(toggleEquipment)
+        HudLayout.registerElement(GROUP, SLOT, equipIcon, 0, 0)
+
+        if equipLabel then
+            equipLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, equipLabel, 36, 8)
+        end
+
+        updateIconState()
+        Timer.new("EquipSyncTimer", updateIconState, SYNC_INTERVAL_MS, true)
+        print("> Equipment Toggle HUD loaded.")
+    else
+        print("> ERROR: Failed to create Equipment Toggle HUD.")
+    end
+end
+
+local function unload()
+    if equipIcon then HudLayout.unregisterElement(equipIcon); equipIcon:destroy(); equipIcon = nil end
+    if equipLabel then HudLayout.unregisterElement(equipLabel); equipLabel:destroy(); equipLabel = nil end
+    destroyTimer("EquipSyncTimer")
+    print("> Equipment Toggle HUD unloaded.")
+end
+
+return {
+    load = load,
+    unload = unload
+}

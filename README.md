@@ -1,11 +1,11 @@
-# GozzimHUD
+# SamuhellHUD
 ## Description
-- GozzimHUD is a collection of scripts for ZeroBot that provides various utilities to enhance your Tibia gameplay. 
+- SamuhellHUD is a collection of scripts for ZeroBot that provides various utilities to enhance your Tibia gameplay. 
 - It features a simple UI to enable and disable scripts on the fly.
 
 ## Installation
-1. Put the `GozzimHUD.lua` script and `GozzimScripts` folder in your ZeroBot-Scripts folder, usually located at `~/Documents/ZeroBot/Scripts`.
-2. In ZeroBot, go to the `Scripting` tab and load the `GozzimHUD.lua` script.
+1. Put the `SamuhellHUD.lua` script and `SamuhellScripts` folder in your ZeroBot-Scripts folder, usually located at `~/Documents/ZeroBot/Scripts`.
+2. In ZeroBot, go to the `Scripting` tab and load the `SamuhellHUD.lua` script.
 3. Use the Config Icon <img style="vertical-align: middle; align-content: center" src="https://github.com/user-attachments/assets/bbb1b45a-633e-4447-b706-e6110a86c648"> in the bottom left to enable or disable the scripts you want.
 4. Hit `Save & Exit` to save your settings for the character you are logged into.
 
@@ -90,7 +90,7 @@
 - Displays your current FPS and latency.
 
 ## Credits
-Scripts for ZeroBot created by [Gozzim](https://github.com/Gozzim).
+Scripts for ZeroBot created by SamuHell.
 
 ## License
-This code and content is released under the [GNU AGPL-3.0 license](https://github.com/Gozzim/GozzimHUD/blob/master/LICENSE).
+This code and content is released under the [GNU AGPL-3.0 license](https://github.com/Gozzim/SamuhellHUD/blob/master/LICENSE).

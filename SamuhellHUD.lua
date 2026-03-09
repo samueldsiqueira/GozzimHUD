@@ -1,8 +1,9 @@
--- GozzimHUD Main Controller
--- Loads and manages all individual GozzimScripts.
+-- SamuhellHUD Main Controller
+-- Author: SamuHell
+-- Loads and manages all individual SamuhellScripts.
 
-local SCRIPTS_FOLDER = "GozzimScripts/"
-local STORAGE_FOLDER = "GozzimScripts/Storage/"
+local SCRIPTS_FOLDER = "SamuhellScripts/"
+local STORAGE_FOLDER = "SamuhellScripts/Storage/"
 
 -- Item ID for the main settings icon.
 local SETTINGS_ICON_ID = 9153
@@ -31,12 +32,25 @@ local allScripts = {
     { name = "SSA/Might", file = "auto_ssa_might.lua.script", defaultState = true },
     { name = "Effects", file = "toggle_effects.lua.script", defaultState = true },
     { name = "Exercise", file = "training.lua.script", defaultState = true },
+    { name = "CaveBot", file = "cavebot_toggle.lua.script", defaultState = true },
+    -- New: Native bot system toggles (Column 2)
+    { name = "Healing", file = "healing_toggle.lua.script", defaultState = true },
+    { name = "Targeting", file = "targeting_toggle.lua.script", defaultState = true },
+    { name = "Shooter", file = "magic_shooter_toggle.lua.script", defaultState = true },
+    { name = "Equipment", file = "equipment_toggle.lua.script", defaultState = true },
+    { name = "HealFriend", file = "heal_friend_toggle.lua.script", defaultState = true },
+    { name = "Timer", file = "timer_toggle.lua.script", defaultState = true },
+    { name = "BotMaster", file = "bot_master_toggle.lua.script", defaultState = true },
+    { name = "Profiles", file = "profile_switcher.lua.script", defaultState = true },
 }
 
 -- Runtime state variables
 local settingsIcon = nil
 local settingsModal = nil
+local layoutModule = nil
 local charInfoModule = nil
+local botStatusModule = nil
+local playerStatsModule = nil
 
 -- Initialize runtime state for each script
 for i, script in ipairs(allScripts) do
@@ -64,7 +78,7 @@ local function saveScriptStates()
         states[script.name] = script.isLoaded
     end
 
-    local fileName = getStorageFileName("GozzimHUD")
+    local fileName = getStorageFileName("SamuhellHUD")
     local filePath = Engine.getScriptsDirectory() .. "/" .. STORAGE_FOLDER .. fileName
     local file = io.open(filePath, "w")
     if file then
@@ -74,7 +88,7 @@ local function saveScriptStates()
 end
 
 local function loadScriptStates()
-    local fileName = getStorageFileName("GozzimHUD")
+    local fileName = getStorageFileName("SamuhellHUD")
     local filePath = Engine.getScriptsDirectory() .. "/" .. STORAGE_FOLDER .. fileName
     local file = io.open(filePath, "r")
     if file then
@@ -170,7 +184,7 @@ openSettingsModal = function()
         settingsModal:destroy()
     end
 
-    settingsModal = CustomModalWindow("GozzimHUD Scripts", "Toggle scripts on or off.")
+    settingsModal = CustomModalWindow("SamuhellHUD Scripts", "Toggle scripts on or off.")
 
     for i, script in ipairs(allScripts) do
         local status = script.isLoaded and '<font color="#00FF00">ON</font>' or '<font color="#FF6666">OFF</font>'
@@ -182,27 +196,47 @@ openSettingsModal = function()
     settingsModal:setCallback(onModalButtonClick)
 end
 
+-- Helper: load an always-on module (char_info, bot_status, etc.)
+local function loadAlwaysOnModule(scriptFile, label)
+    local path = Engine.getScriptsDirectory() .. "/" .. SCRIPTS_FOLDER .. scriptFile
+    local chunk, err = loadfile(path)
+    if not chunk then
+        print(string.format("!! ERROR loading module %s: %s", scriptFile, tostring(err)))
+        return nil
+    end
+    local success, mod = pcall(chunk)
+    if success and type(mod) == "table" and mod.load then
+        mod.load()
+        print(string.format(">> Loaded module: %s", label))
+        return mod
+    else
+        print(string.format("!! ERROR initialising %s: %s", scriptFile, tostring(mod)))
+        return nil
+    end
+end
+
 -- Main load function for the entire HUD controller.
 local function loadController()
-    print(">> GozzimHUD Controller loading...")
+    print(">> SamuhellHUD Controller loading...")
+
+    -- Settings icon (improved: scale + subtle opacity boost)
     settingsIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, SETTINGS_ICON_ID, true)
     if settingsIcon then
+        settingsIcon:setScale(1.4)
+        settingsIcon:setOpacity(0.92)
         settingsIcon:setCallback(openSettingsModal)
     end
 
-    -- Load the Char Info script by default
-    local charInfoPath = Engine.getScriptsDirectory() .. "/" .. SCRIPTS_FOLDER .. "char_info.lua.script"
-    local chunk, err = loadfile(charInfoPath)
-    if chunk then
-        local success, module = pcall(chunk)
-        if success and type(module) == "table" and module.load then
-            charInfoModule = module
-            charInfoModule.load()
-            print(">> Loaded module: Char Info")
-        end
-    else
-        print("!! ERROR loading module char_info.lua.script: " .. tostring(err))
+    -- Load layout manager FIRST (exposes HudLayout globally)
+    layoutModule = loadAlwaysOnModule("hud_layout.lua.script", "HUD Layout")
+    if layoutModule then
+        HudLayout = layoutModule
     end
+
+    -- Always-on modules (not toggleable via menu)
+    charInfoModule    = loadAlwaysOnModule("char_info.lua.script",    "Char Info")
+    botStatusModule   = loadAlwaysOnModule("bot_status.lua.script",   "Bot Status")
+    playerStatsModule = loadAlwaysOnModule("player_stats.lua.script", "Player Stats")
 
     if not loadScriptStates() then
         -- Determine vocation for default script loading
@@ -225,22 +259,39 @@ local function loadController()
         end
     end
 
-    print(">> GozzimHUD Controller loaded successfully.")
+    print(">> SamuhellHUD Controller loaded successfully.")
 end
 
 -- Main unload function for the entire HUD controller.
 local function unloadController()
-    print(">> GozzimHUD Controller unloading...")
+    print(">> SamuhellHUD Controller unloading...")
     for i, script in ipairs(allScripts) do
         if script.isLoaded then
             unloadScript(i)
         end
     end
 
-    -- Unload the char info module
+    -- Unload always-on modules
     if charInfoModule and charInfoModule.unload then
         charInfoModule.unload()
         charInfoModule = nil
+    end
+
+    if botStatusModule and botStatusModule.unload then
+        botStatusModule.unload()
+        botStatusModule = nil
+    end
+
+    if playerStatsModule and playerStatsModule.unload then
+        playerStatsModule.unload()
+        playerStatsModule = nil
+    end
+
+    -- Unload layout manager LAST
+    if layoutModule and layoutModule.unload then
+        layoutModule.unload()
+        layoutModule = nil
+        HudLayout = nil
     end
 
     if settingsIcon then
@@ -253,11 +304,11 @@ local function unloadController()
         settingsModal = nil
     end
 
-    print(">> GozzimHUD Controller unloaded successfully.")
+    print(">> SamuhellHUD Controller unloaded successfully.")
 end
 
 -- The script starts here by calling the main load function.
 loadController()
 
 -- Provide the unload function globally so it can be called if the script is reloaded.
-GozzimHUD_Unload = unloadController
+SamuhellHUD_Unload = unloadController

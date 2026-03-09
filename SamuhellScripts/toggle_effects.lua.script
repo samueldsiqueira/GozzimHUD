@@ -1,23 +1,21 @@
 -- Disable Magic Effects Hotkey Button
+-- Author: SamuHell
 -- Clicks the hotkey assigned to the "Disable Magic Effects" function.
 -- This version acts as a button only, as the on/off state cannot be read by the script.
 
 -- #################### CONFIGURATION ####################
--- The EXACT key you assigned in ZeroBot's Hotkey Manager for this function.
 local TOGGLE_HOTKEY = "l"
-
--- Item ID for the HUD icon.
 local ICON_ITEM_ID = 3248
 
--- Position of the icon on the screen, next to the anti-push icon.
-local ICON_POSITION_X = 50
-local ICON_POSITION_Y = 520
-
+-- Position managed by HudLayout
+local GROUP = "scripts"
+local SLOT = 14
 -- ######################################################
 
 
 -- This will hold our HUD object.
 local effectsButtonIcon = nil
+local effectsLabel = nil
 
 -- This function is called when the HUD icon is clicked.
 local function pressToggleHotkey()
@@ -35,25 +33,30 @@ local function pressToggleHotkey()
 end
 
 local function load()
-    -- Create the HUD icon.
-    effectsButtonIcon = HUD.new(ICON_POSITION_X, ICON_POSITION_Y, ICON_ITEM_ID, true)
+    local pos = HudLayout.getSlotPosition(GROUP, SLOT)
+    effectsButtonIcon = HUD.new(pos.x, pos.y, ICON_ITEM_ID, true)
+    effectsLabel = HUD.new(pos.x + 36, pos.y + 8, "Effects", true)
 
     if effectsButtonIcon then
-        -- Assign our pressToggleHotkey function to be called when the icon is clicked.
         effectsButtonIcon:setCallback(pressToggleHotkey)
+        HudLayout.registerElement(GROUP, SLOT, effectsButtonIcon, 0, 0)
 
-        print(">> Magic Effects Button HUD loaded. Click the ring icon to press '" .. TOGGLE_HOTKEY .. "'.")
+        if effectsLabel then
+            effectsLabel:setColor(200, 200, 200)
+            effectsLabel:setFontSize(9)
+            HudLayout.registerElement(GROUP, SLOT, effectsLabel, 36, 8)
+        end
+
+        print("> Magic Effects Button HUD loaded.")
     else
-        print(">> ERROR: Failed to create Magic Effects Button HUD.")
+        print("> ERROR: Failed to create Magic Effects Button HUD.")
     end
 end
 
 local function unload()
-    if effectsButtonIcon then
-        effectsButtonIcon:destroy()
-        effectsButtonIcon = nil
-    end
-    print(">> Magic Effects Button HUD unloaded.")
+    if effectsButtonIcon then HudLayout.unregisterElement(effectsButtonIcon); effectsButtonIcon:destroy(); effectsButtonIcon = nil end
+    if effectsLabel then HudLayout.unregisterElement(effectsLabel); effectsLabel:destroy(); effectsLabel = nil end
+    print("> Magic Effects Button HUD unloaded.")
 end
 
 return {
