@@ -19,30 +19,34 @@ local GROUP_DEFAULTS = {
         columns = 1,
         colWidth = 0,
         label = "[ Info ]",
+        isVisible = true,
     },
     scripts = {
         baseX = 10,
         baseY = 170,      -- below info group
         rowHeight = 40,    -- icon (32px) + spacing
-        columns = 1,
-        colWidth = 130,
+        columns = 3,
+        colWidth = 100,
         label = "[ Scripts ]",
+        isVisible = true,
     },
     bot = {
         baseX = 200,
         baseY = 10,
         rowHeight = 40,
-        columns = 1,
-        colWidth = 130,
+        columns = 3,
+        colWidth = 100,
         label = "[ Bot ]",
+        isVisible = true,
     },
     profiles = {
         baseX = 200,
         baseY = 310,
         rowHeight = 40,
-        columns = 1,
-        colWidth = 130,
+        columns = 3,
+        colWidth = 100,
         label = "[ Profiles ]",
+        isVisible = true,
     },
 }
 
@@ -65,6 +69,7 @@ for name, def in pairs(GROUP_DEFAULTS) do
         columns = def.columns,
         colWidth = def.colWidth,
         label = def.label,
+        isVisible = def.isVisible,
     }
 end
 
@@ -85,7 +90,7 @@ local function savePositions()
     if not fileName then return end
     local data = {}
     for name, g in pairs(groups) do
-        data[name] = { baseX = g.baseX, baseY = g.baseY }
+        data[name] = { baseX = g.baseX, baseY = g.baseY, isVisible = g.isVisible }
     end
     local filePath = Engine.getScriptsDirectory() .. "/" .. STORAGE_FOLDER .. fileName
     local file = io.open(filePath, "w")
@@ -109,6 +114,9 @@ local function loadPositions()
                 if groups[name] then
                     groups[name].baseX = pos.baseX or groups[name].baseX
                     groups[name].baseY = pos.baseY or groups[name].baseY
+                    if pos.isVisible ~= nil then
+                        groups[name].isVisible = pos.isVisible
+                    end
                 end
             end
             return true
@@ -158,18 +166,31 @@ local function unregisterElement(hudElement)
     end
 end
 
--- Reposition all registered elements of a group
+-- Reposition all registered elements of a group, and handle visibility
 local function repositionGroup(groupName)
+    local g = groups[groupName]
+    if not g then return end
+    
     for _, elem in ipairs(registeredElements) do
         if elem.group == groupName then
             local pos = getSlotPosition(elem.group, elem.slot)
             elem.hud:setPos(pos.x + elem.offsetX, pos.y + elem.offsetY)
+            
+            if g.isVisible then
+                elem.hud:show()
+            else
+                elem.hud:hide()
+            end
         end
     end
     -- Reposition header
     if headerHuds[groupName] then
-        local g = groups[groupName]
         headerHuds[groupName]:setPos(g.baseX, g.baseY)
+        if g.isVisible then
+            headerHuds[groupName]:setText(g.label)
+        else
+            headerHuds[groupName]:setText(g.label .. " (Hidden)")
+        end
     end
 end
 
@@ -188,13 +209,18 @@ local function openMoveModal(groupName)
     if not g then return end
 
     local info = string.format("%s  |  X: %d  Y: %d", g.label, g.baseX, g.baseY)
-    moveModal = CustomModalWindow("Move " .. g.label, info)
+    moveModal = CustomModalWindow("Move / Toggle " .. g.label, info)
 
     moveModal:addButton("Up [" .. MOVE_STEP .. "px]")
     moveModal:addButton("Down [" .. MOVE_STEP .. "px]")
     moveModal:addButton("Left [" .. MOVE_STEP .. "px]")
     moveModal:addButton("Right [" .. MOVE_STEP .. "px]")
     moveModal:addButton("Reset Default")
+    if g.isVisible then
+        moveModal:addButton("Hide Group")
+    else
+        moveModal:addButton("Show Group")
+    end
     moveModal:addButton("Save & Close")
 
     moveModal:setCallback(function(buttonIndex)
@@ -212,6 +238,13 @@ local function openMoveModal(groupName)
             g.baseX = def.baseX
             g.baseY = def.baseY
         elseif buttonIndex == 5 then
+            -- Toggle Visibility
+            g.isVisible = not g.isVisible
+            savePositions()
+            repositionGroup(groupName)
+            openMoveModal(groupName)
+            return
+        elseif buttonIndex == 6 then
             -- Save & Close
             savePositions()
             if moveModal then moveModal:destroy(); moveModal = nil end
