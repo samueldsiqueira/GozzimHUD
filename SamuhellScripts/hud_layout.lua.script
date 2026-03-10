@@ -1,80 +1,35 @@
 -- HUD Layout Manager for Zerobot
 -- Author: SamuHell
--- Centralized position manager for all HUD groups.
--- Supports repositioning via click-modal and persists positions per character.
+-- Centralized position manager for HUD scripts.
+-- Supports independent repositioning for most widgets, but monolithic groups for 'info'.
 
 local STORAGE_FOLDER = "SamuhellScripts/Storage/"
 
 -- ─────────────────────────────────────────────────────────────
--- Group definitions with slot layout rules
+-- Default layout rules
 -- ─────────────────────────────────────────────────────────────
--- Each group has a default baseX/baseY and layout parameters.
--- Scripts query positions via HudLayout.getSlotPosition(group, slot)
-
 local GROUP_DEFAULTS = {
-    info = {
-        baseX = 10,
-        baseY = 10,
-        rowHeight = 16,   -- text-only, compact
-        columns = 1,
-        colWidth = 0,
-        label = "[ Info ]",
-        isVisible = true,
-    },
-    scripts = {
-        baseX = 10,
-        baseY = 170,      -- below info group
-        rowHeight = 40,    -- icon (32px) + spacing
-        columns = 3,
-        colWidth = 100,
-        label = "[ Scripts ]",
-        isVisible = true,
-    },
-    bot = {
-        baseX = 200,
-        baseY = 10,
-        rowHeight = 40,
-        columns = 3,
-        colWidth = 100,
-        label = "[ Bot ]",
-        isVisible = true,
-    },
-    profiles = {
-        baseX = 200,
-        baseY = 310,
-        rowHeight = 40,
-        columns = 3,
-        colWidth = 100,
-        label = "[ Profiles ]",
-        isVisible = true,
-    },
+    info = { baseX = 10, baseY = 10, rowHeight = 16, columns = 1, colWidth = 0, isGroup = true, label = "[ Player Info ]" },
+    scripts = { baseX = 10, baseY = 170, rowHeight = 40, columns = 3, colWidth = 100, isGroup = false },
+    bot = { baseX = 200, baseY = 10, rowHeight = 40, columns = 3, colWidth = 100, isGroup = false },
+    profiles = { baseX = 200, baseY = 310, rowHeight = 40, columns = 3, colWidth = 100, isGroup = false },
 }
 
 -- ─────────────────────────────────────────────────────────────
 -- Runtime state
 -- ─────────────────────────────────────────────────────────────
-local groups = {}              -- runtime copy with current positions
-local registeredElements = {}  -- {group, slot, hud, offsetX, offsetY}
-local headerHuds = {}          -- header HUD elements per group
-local moveModal = nil          -- active reposition modal
+-- For independent widgets:
+local widgetPositions = {}  -- { [widgetKey] = {x=10, y=10, isVisible=true} }
+local activeWidgets = {}    -- { [widgetKey] = { bracket=hud, elements={{...}} } }
+
+-- For monolithic groups:
+local groupPositions = {}   -- { [groupName] = {x=10, y=10, isVisible=true} }
+local activeGroups = {}     -- { [groupName] = { header=hud, elements={{...}} } }
+
+local moveModal = nil
 
 -- ─────────────────────────────────────────────────────────────
--- Init groups from defaults
--- ─────────────────────────────────────────────────────────────
-for name, def in pairs(GROUP_DEFAULTS) do
-    groups[name] = {
-        baseX = def.baseX,
-        baseY = def.baseY,
-        rowHeight = def.rowHeight,
-        columns = def.columns,
-        colWidth = def.colWidth,
-        label = def.label,
-        isVisible = def.isVisible,
-    }
-end
-
--- ─────────────────────────────────────────────────────────────
--- Persistence: save/load group positions
+-- Persistence: save/load positions
 -- ─────────────────────────────────────────────────────────────
 local function getStorageFileName()
     local worldName = Client.getWorldName()
@@ -82,17 +37,17 @@ local function getStorageFileName()
     if not worldName or not charName then return nil end
     worldName = worldName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
     charName = charName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
-    return string.format("%s_%s_hud_layout.json", worldName, charName)
+    return string.format("%s_%s_hud_widgets_v2.json", worldName, charName)
 end
 
 local function savePositions()
     local fileName = getStorageFileName()
     if not fileName then return end
-    local data = {}
-    for name, g in pairs(groups) do
-        data[name] = { baseX = g.baseX, baseY = g.baseY, isVisible = g.isVisible }
-    end
     local filePath = Engine.getScriptsDirectory() .. "/" .. STORAGE_FOLDER .. fileName
+    local data = {
+        widgets = widgetPositions,
+        groups = groupPositions
+    }
     local file = io.open(filePath, "w")
     if file then
         file:write(JSON.encode(data))
@@ -110,12 +65,20 @@ local function loadPositions()
         file:close()
         local success, data = pcall(JSON.decode, content)
         if success and type(data) == "table" then
-            for name, pos in pairs(data) do
-                if groups[name] then
-                    groups[name].baseX = pos.baseX or groups[name].baseX
-                    groups[name].baseY = pos.baseY or groups[name].baseY
-                    if pos.isVisible ~= nil then
-                        groups[name].isVisible = pos.isVisible
+            if data.widgets then
+                for key, pos in pairs(data.widgets) do
+                    widgetPositions[key] = { x = pos.x, y = pos.y, isVisible = pos.isVisible ~= false }
+                end
+            end
+            if data.groups then
+                for name, pos in pairs(data.groups) do
+                    groupPositions[name] = { x = pos.x, y = pos.y, isVisible = pos.isVisible ~= false }
+                end
+            else
+                -- Fallback for old file structure (if they just saved widgets)
+                for key, pos in pairs(data) do
+                    if type(pos) == "table" and pos.x then
+                        widgetPositions[key] = { x = pos.x, y = pos.y, isVisible = pos.isVisible ~= false }
                     end
                 end
             end
@@ -125,158 +88,275 @@ local function loadPositions()
     return false
 end
 
+-- Init group positions early
+for name, def in pairs(GROUP_DEFAULTS) do
+    if def.isGroup then
+        groupPositions[name] = { x = def.baseX, y = def.baseY, isVisible = true }
+    end
+end
+
 -- ─────────────────────────────────────────────────────────────
 -- Core API: get slot position
 -- ─────────────────────────────────────────────────────────────
-local function getSlotPosition(groupName, slotIndex)
-    local g = groups[groupName]
-    if not g then
-        print("!! HudLayout: Unknown group '" .. tostring(groupName) .. "'")
-        return { x = 0, y = 0 }
-    end
-    -- Slot 0 is the first slot BELOW the header (header takes ~20px)
-    local headerOffset = 20
+local function getDefaultSlotPosition(groupName, slotIndex, isGroup)
+    local g = GROUP_DEFAULTS[groupName]
+    if not g then return { x = 0, y = 0 } end
+
     local row = math.floor(slotIndex / g.columns)
     local col = slotIndex % g.columns
-    return {
-        x = g.baseX + col * g.colWidth,
-        y = g.baseY + headerOffset + row * g.rowHeight,
-    }
-end
-
--- ─────────────────────────────────────────────────────────────
--- Element registration for live repositioning
--- ─────────────────────────────────────────────────────────────
-local function registerElement(groupName, slotIndex, hudElement, offsetX, offsetY)
-    if not hudElement then return end
-    table.insert(registeredElements, {
-        group = groupName,
-        slot = slotIndex,
-        hud = hudElement,
-        offsetX = offsetX or 0,
-        offsetY = offsetY or 0,
-    })
-end
-
-local function unregisterElement(hudElement)
-    for i = #registeredElements, 1, -1 do
-        if registeredElements[i].hud == hudElement then
-            table.remove(registeredElements, i)
-        end
-    end
-end
-
--- Reposition all registered elements of a group, and handle visibility
-local function repositionGroup(groupName)
-    local g = groups[groupName]
-    if not g then return end
     
-    for _, elem in ipairs(registeredElements) do
-        if elem.group == groupName then
-            local pos = getSlotPosition(elem.group, elem.slot)
-            elem.hud:setPos(pos.x + elem.offsetX, pos.y + elem.offsetY)
-            
-            if g.isVisible then
-                elem.hud:show()
-            else
-                elem.hud:hide()
-            end
-        end
+    if isGroup then
+        local headerOffset = 20
+        return {
+            x = (groupPositions[groupName] and groupPositions[groupName].x or g.baseX) + col * g.colWidth,
+            y = (groupPositions[groupName] and groupPositions[groupName].y or g.baseY) + headerOffset + row * g.rowHeight,
+        }
+    else
+        return {
+            x = g.baseX + col * g.colWidth,
+            y = g.baseY + row * g.rowHeight,
+        }
     end
-    -- Reposition header
-    if headerHuds[groupName] then
-        headerHuds[groupName]:setPos(g.baseX, g.baseY)
-        if g.isVisible then
-            headerHuds[groupName]:setText(g.label)
-        else
-            headerHuds[groupName]:setText(g.label .. " (Hidden)")
+end
+
+local function getSlotPosition(groupName, slotIndex)
+    local def = GROUP_DEFAULTS[groupName]
+    local isGroup = def and def.isGroup
+
+    if isGroup then
+        return getDefaultSlotPosition(groupName, slotIndex, true)
+    else
+        local widgetKey = groupName .. "_" .. tostring(slotIndex)
+        if widgetPositions[widgetKey] then
+            return { x = widgetPositions[widgetKey].x, y = widgetPositions[widgetKey].y }
         end
+        return getDefaultSlotPosition(groupName, slotIndex, false)
     end
 end
 
 -- ─────────────────────────────────────────────────────────────
--- Reposition Modal
+-- Reposition Modals & Logic
 -- ─────────────────────────────────────────────────────────────
 local MOVE_STEP = 20
 
-local function openMoveModal(groupName)
-    if moveModal then
-        moveModal:destroy()
-        moveModal = nil
+-- WIDGET LOGIC
+local function repositionWidget(widgetKey)
+    local wPos = widgetPositions[widgetKey]
+    local wActive = activeWidgets[widgetKey]
+    if not wPos or not wActive then return end
+
+    if wActive.bracket then
+        wActive.bracket:setPos(wPos.x - 18, wPos.y)
     end
 
-    local g = groups[groupName]
-    if not g then return end
-
-    local info = string.format("%s  |  X: %d  Y: %d", g.label, g.baseX, g.baseY)
-    moveModal = CustomModalWindow("Move / Toggle " .. g.label, info)
-
-    moveModal:addButton("Up [" .. MOVE_STEP .. "px]")
-    moveModal:addButton("Down [" .. MOVE_STEP .. "px]")
-    moveModal:addButton("Left [" .. MOVE_STEP .. "px]")
-    moveModal:addButton("Right [" .. MOVE_STEP .. "px]")
-    moveModal:addButton("Reset Default")
-    if g.isVisible then
-        moveModal:addButton("Hide Group")
-    else
-        moveModal:addButton("Show Group")
+    for _, elem in ipairs(wActive.elements) do
+        if elem.hud then
+            elem.hud:setPos(wPos.x + elem.offsetX, wPos.y + elem.offsetY)
+            if wPos.isVisible then elem.hud:show() else elem.hud:hide() end
+        end
     end
-    moveModal:addButton("Save & Close")
+end
 
-    moveModal:setCallback(function(buttonIndex)
-        if buttonIndex == 0 then
-            g.baseY = g.baseY - MOVE_STEP
-        elseif buttonIndex == 1 then
-            g.baseY = g.baseY + MOVE_STEP
-        elseif buttonIndex == 2 then
-            g.baseX = g.baseX - MOVE_STEP
-        elseif buttonIndex == 3 then
-            g.baseX = g.baseX + MOVE_STEP
-        elseif buttonIndex == 4 then
-            -- Reset to default
-            local def = GROUP_DEFAULTS[groupName]
-            g.baseX = def.baseX
-            g.baseY = def.baseY
-        elseif buttonIndex == 5 then
-            -- Toggle Visibility
-            g.isVisible = not g.isVisible
+local function openWidgetModal(widgetKey)
+    if moveModal then moveModal:destroy(); moveModal = nil end
+    local wPos = widgetPositions[widgetKey]
+    if not wPos then return end
+
+    local info = string.format("Widget Component\nX: %d  Y: %d", wPos.x, wPos.y)
+    moveModal = CustomModalWindow("Configuração Individual", info)
+
+    moveModal:addButton("Subir [100px]")
+    moveModal:addButton("Descer [100px]")
+    moveModal:addButton("Esquerda [100px]")
+    moveModal:addButton("Direita [100px]")
+    moveModal:addButton("Subir [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Descer [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Esquerda [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Direita [" .. MOVE_STEP .. "px]")
+    moveModal:addButton(wPos.isVisible and "Esconder (Hide)" or "Mostrar (Show)")
+    moveModal:addButton("Salvar e Fechar")
+
+    moveModal:setCallback(function(bInt)
+        if bInt == 0 then wPos.y = wPos.y - 100
+        elseif bInt == 1 then wPos.y = wPos.y + 100
+        elseif bInt == 2 then wPos.x = wPos.x - 100
+        elseif bInt == 3 then wPos.x = wPos.x + 100
+        elseif bInt == 4 then wPos.y = wPos.y - MOVE_STEP
+        elseif bInt == 5 then wPos.y = wPos.y + MOVE_STEP
+        elseif bInt == 6 then wPos.x = wPos.x - MOVE_STEP
+        elseif bInt == 7 then wPos.x = wPos.x + MOVE_STEP
+        elseif bInt == 8 then
+            wPos.isVisible = not wPos.isVisible
+            savePositions()
+            repositionWidget(widgetKey)
+            openWidgetModal(widgetKey)
+            return
+        elseif bInt == 9 then
+            savePositions()
+            if moveModal then moveModal:destroy(); moveModal = nil end
+            return
+        end
+        repositionWidget(widgetKey)
+        openWidgetModal(widgetKey)
+    end)
+end
+
+-- GROUP LOGIC
+local function repositionGroup(groupName)
+    local gPos = groupPositions[groupName]
+    local gActive = activeGroups[groupName]
+    if not gPos or not gActive then return end
+
+    if gActive.header then
+        gActive.header:setPos(gPos.x, gPos.y)
+        if gPos.isVisible then
+            gActive.header:setText(GROUP_DEFAULTS[groupName].label)
+        else
+            gActive.header:setText(GROUP_DEFAULTS[groupName].label .. " (Hidden)")
+        end
+    end
+
+    for _, elem in ipairs(gActive.elements) do
+        if elem.hud then
+            local p = getDefaultSlotPosition(groupName, elem.slot, true)
+            elem.hud:setPos(p.x + elem.offsetX, p.y + elem.offsetY)
+            if gPos.isVisible then elem.hud:show() else elem.hud:hide() end
+        end
+    end
+end
+
+local function openGroupModal(groupName)
+    if moveModal then moveModal:destroy(); moveModal = nil end
+    local gPos = groupPositions[groupName]
+    if not gPos then return end
+
+    local info = string.format("%s\nX: %d  Y: %d", GROUP_DEFAULTS[groupName].label, gPos.x, gPos.y)
+    moveModal = CustomModalWindow("Grupo de Layout", info)
+
+    moveModal:addButton("Subir [100px]")
+    moveModal:addButton("Descer [100px]")
+    moveModal:addButton("Esquerda [100px]")
+    moveModal:addButton("Direita [100px]")
+    moveModal:addButton("Subir [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Descer [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Esquerda [" .. MOVE_STEP .. "px]")
+    moveModal:addButton("Direita [" .. MOVE_STEP .. "px]")
+    moveModal:addButton(gPos.isVisible and "Esconder (Hide)" or "Mostrar (Show)")
+    moveModal:addButton("Salvar e Fechar")
+
+    moveModal:setCallback(function(bInt)
+        if bInt == 0 then gPos.y = gPos.y - 100
+        elseif bInt == 1 then gPos.y = gPos.y + 100
+        elseif bInt == 2 then gPos.x = gPos.x - 100
+        elseif bInt == 3 then gPos.x = gPos.x + 100
+        elseif bInt == 4 then gPos.y = gPos.y - MOVE_STEP
+        elseif bInt == 5 then gPos.y = gPos.y + MOVE_STEP
+        elseif bInt == 6 then gPos.x = gPos.x - MOVE_STEP
+        elseif bInt == 7 then gPos.x = gPos.x + MOVE_STEP
+        elseif bInt == 8 then
+            gPos.isVisible = not gPos.isVisible
             savePositions()
             repositionGroup(groupName)
-            openMoveModal(groupName)
+            openGroupModal(groupName)
             return
-        elseif buttonIndex == 6 then
-            -- Save & Close
+        elseif bInt == 9 then
             savePositions()
             if moveModal then moveModal:destroy(); moveModal = nil end
             return
         end
         repositionGroup(groupName)
-        -- Reopen modal with updated coords
-        openMoveModal(groupName)
+        openGroupModal(groupName)
     end)
 end
 
 -- ─────────────────────────────────────────────────────────────
--- Header HUDs (clickable group labels)
+-- Element registration
 -- ─────────────────────────────────────────────────────────────
-local function createHeaders()
-    for name, g in pairs(groups) do
-        headerHuds[name] = HUD.new(g.baseX, g.baseY, g.label, true)
-        if headerHuds[name] then
-            headerHuds[name]:setColor(255, 180, 50)
-            headerHuds[name]:setFontSize(9)
-            headerHuds[name]:setCallback(function()
-                openMoveModal(name)
-            end)
+local function registerElement(groupName, slotIndex, hudElement, offsetX, offsetY)
+    if not hudElement then return end
+    local def = GROUP_DEFAULTS[groupName]
+    local isGroup = def and def.isGroup
+
+    if isGroup then
+        if not activeGroups[groupName] then
+            activeGroups[groupName] = { elements = {} }
+            local gPos = groupPositions[groupName]
+            local h = HUD.new(gPos.x, gPos.y, def.label, true)
+            if h then
+                h:setColor(255, 180, 50)
+                h:setFontSize(9)
+                h:setCallback(function() openGroupModal(groupName) end)
+                activeGroups[groupName].header = h
+            end
         end
+
+        table.insert(activeGroups[groupName].elements, {
+            slot = slotIndex,
+            hud = hudElement,
+            offsetX = offsetX or 0,
+            offsetY = offsetY or 0,
+        })
+        repositionGroup(groupName)
+
+    else
+        local widgetKey = groupName .. "_" .. tostring(slotIndex)
+        if not widgetPositions[widgetKey] then
+            local defPos = getDefaultSlotPosition(groupName, slotIndex, false)
+            widgetPositions[widgetKey] = { x = defPos.x, y = defPos.y, isVisible = true }
+        end
+
+        if not activeWidgets[widgetKey] then
+            activeWidgets[widgetKey] = { elements = {}, bracket = nil }
+        end
+
+        table.insert(activeWidgets[widgetKey].elements, {
+            hud = hudElement,
+            offsetX = offsetX or 0,
+            offsetY = offsetY or 0,
+        })
+
+        if not activeWidgets[widgetKey].bracket then
+            local br = HUD.new(widgetPositions[widgetKey].x - 18, widgetPositions[widgetKey].y, "[+]", true)
+            if br then
+                br:setColor(255, 180, 50)
+                br:setFontSize(9)
+                br:setCallback(function() openWidgetModal(widgetKey) end)
+                activeWidgets[widgetKey].bracket = br
+            end
+        end
+
+        repositionWidget(widgetKey)
     end
 end
 
-local function destroyHeaders()
-    for name, h in pairs(headerHuds) do
-        if h then h:destroy() end
+local function unregisterElement(hudElement)
+    -- Check widgets
+    for key, wActive in pairs(activeWidgets) do
+        for i = #wActive.elements, 1, -1 do
+            if wActive.elements[i].hud == hudElement then
+                table.remove(wActive.elements, i)
+            end
+        end
+        if #wActive.elements == 0 and wActive.bracket then
+            wActive.bracket:destroy()
+            wActive.bracket = nil
+            activeWidgets[key] = nil
+        end
     end
-    headerHuds = {}
+
+    -- Check groups
+    for gName, gActive in pairs(activeGroups) do
+        for i = #gActive.elements, 1, -1 do
+            if gActive.elements[i].hud == hudElement then
+                table.remove(gActive.elements, i)
+            end
+        end
+        if #gActive.elements == 0 and gActive.header then
+            gActive.header:destroy()
+            gActive.header = nil
+            activeGroups[gName] = nil
+        end
+    end
 end
 
 -- ─────────────────────────────────────────────────────────────
@@ -286,18 +366,23 @@ local M = {}
 
 function M.load()
     loadPositions()
-    createHeaders()
-    print(">> HUD Layout Manager loaded.")
+    print(">> HUD Layout Manager (Hybrid) loaded.")
 end
 
 function M.unload()
     if moveModal then moveModal:destroy(); moveModal = nil end
-    destroyHeaders()
-    registeredElements = {}
+    for key, wActive in pairs(activeWidgets) do
+        if wActive.bracket then wActive.bracket:destroy(); wActive.bracket = nil end
+    end
+    for gName, gActive in pairs(activeGroups) do
+        if gActive.header then gActive.header:destroy(); gActive.header = nil end
+    end
+    activeWidgets = {}
+    activeGroups = {}
     print(">> HUD Layout Manager unloaded.")
 end
 
--- Public API (set globally after load)
+-- Public API
 M.getSlotPosition = getSlotPosition
 M.registerElement = registerElement
 M.unregisterElement = unregisterElement
