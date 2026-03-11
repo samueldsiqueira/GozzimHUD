@@ -34,7 +34,7 @@ local moveModal = nil
 local function getStorageFileName()
     local worldName = Client.getWorldName()
     local charName = Player.getName()
-    if not worldName or not charName then return nil end
+    if not worldName or not charName or worldName == "" or charName == "" then return nil end
     worldName = worldName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
     charName = charName:gsub("^%s*(.-)%s*$", "%1"):gsub("%s", "_"):gsub(":", ".")
     return string.format("%s_%s_hud_widgets_v2.json", worldName, charName)
@@ -196,6 +196,7 @@ local function openWidgetModal(widgetKey)
             if moveModal then moveModal:destroy(); moveModal = nil end
             return
         end
+        savePositions() -- auto-save when moved
         repositionWidget(widgetKey)
         openWidgetModal(widgetKey)
     end)
@@ -264,6 +265,7 @@ local function openGroupModal(groupName)
             if moveModal then moveModal:destroy(); moveModal = nil end
             return
         end
+        savePositions() -- auto-save when moved
         repositionGroup(groupName)
         openGroupModal(groupName)
     end)
